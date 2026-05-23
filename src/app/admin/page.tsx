@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import Background3D from "@/components/Background3D";
 import { useT } from "@/lib/i18n/context";
@@ -9,16 +10,11 @@ import type { QuestionSet, Analytics } from "@/lib/types";
 
 type Banner = { kind: "success" | "error"; text: string } | null;
 
-const LS_CODE = "met_admin_code";
-
 export default function AdminPage() {
   const t = useT();
+  const router = useRouter();
 
-  const [code, setCode] = useState<string | null>(null);
-  const [codeInput, setCodeInput] = useState("");
-  const [gateError, setGateError] = useState(false);
-  const [checking, setChecking] = useState(true);
-
+  const [loading, setLoading] = useState(true);
   const [sets, setSets] = useState<QuestionSet[]>([]);
   const [analytics, setAnalytics] = useState<Analytics | null>(null);
   const [title, setTitle] = useState("");
@@ -27,80 +23,51 @@ export default function AdminPage() {
   const [banner, setBanner] = useState<Banner>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
-  const adminFetch = useCallback(
-    (url: string, c: string, opts: RequestInit = {}) =>
-      fetch(url, { ...opts, headers: { ...(opts.headers || {}), "x-admin-code": c } }),
-    []
-  );
-
-  const loadData = useCallback(
-    async (c: string) => {
-      const [setsRes, anRes] = await Promise.all([
-        adminFetch("/api/admin/sets", c),
-        adminFetch("/api/admin/analytics", c),
-      ]);
-      if (setsRes.ok) setSets((await setsRes.json()).sets);
-      if (anRes.ok) setAnalytics((await anRes.json()).analytics);
-    },
-    [adminFetch]
-  );
-
-  // Validar código guardado al cargar.
-  useEffect(() => {
-    const stored = localStorage.getItem(LS_CODE);
-    if (!stored) {
-      setChecking(false);
+  // La sesión va en una cookie HttpOnly (la pone /api/admin/login). No hay
+  // código en el cliente. El middleware ya protege esta ruta y las APIs.
+  const loadData = useCallback(async () => {
+    const [setsRes, anRes] = await Promise.all([
+      fetch("/api/admin/sets"),
+      fetch("/api/admin/analytics"),
+    ]);
+    if (setsRes.status === 401) {
+      router.replace("/admin/login");
       return;
     }
+    if (setsRes.ok) setSets((await setsRes.json()).sets);
+    if (anRes.ok) setAnalytics((await anRes.json()).analytics);
+  }, [router]);
+
+  useEffect(() => {
     (async () => {
-      const res = await adminFetch("/api/admin/sets", stored);
-      if (res.ok) {
-        setCode(stored);
-        await loadData(stored);
-      } else {
-        localStorage.removeItem(LS_CODE);
-      }
-      setChecking(false);
+      await loadData();
+      setLoading(false);
     })();
-  }, [adminFetch, loadData]);
+  }, [loadData]);
 
-  const submitCode = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setGateError(false);
-    const res = await adminFetch("/api/admin/sets", codeInput);
-    if (res.ok) {
-      localStorage.setItem(LS_CODE, codeInput);
-      setCode(codeInput);
-      await loadData(codeInput);
-    } else {
-      setGateError(true);
-    }
-  };
-
-  const lock = () => {
-    localStorage.removeItem(LS_CODE);
-    setCode(null);
-    setSets([]);
-    setAnalytics(null);
+  const logout = async () => {
+    await fetch("/api/admin/logout", { method: "POST" });
+    router.replace("/admin/login");
+    router.refresh();
   };
 
   const upload = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!file || !code) return;
+    if (!file) return;
     setUploading(true);
     setBanner(null);
     const fd = new FormData();
     fd.append("file", file);
     if (title.trim()) fd.append("title", title.trim());
     try {
-      const res = await adminFetch("/api/admin/upload", code, { method: "POST", body: fd });
+      const res = await fetch("/api/admin/upload", { method: "POST", body: fd });
       const data = await res.json();
       if (res.ok) {
         setBanner({ kind: "success", text: t("admin.parsedOk", { n: data.parsedCount }) });
         setTitle("");
         setFile(null);
         if (fileRef.current) fileRef.current.value = "";
-        await loadData(code);
+        await loadData();
       } else {
         setBanner({ kind: "error", text: t("admin.parseError") });
       }
@@ -112,9 +79,8 @@ export default function AdminPage() {
   };
 
   const remove = async (id: string) => {
-    if (!code) return;
-    await adminFetch(`/api/admin/sets/${id}`, code, { method: "DELETE" });
-    await loadData(code);
+    await fetch(`/api/admin/sets/${id}`, { method: "DELETE" });
+    await loadData();
   };
 
   const downloadTemplate = () => {
@@ -127,8 +93,7 @@ export default function AdminPage() {
     URL.revokeObjectURL(url);
   };
 
-  // ---- Compuerta de código ----
-  if (checking) {
+  if (loading) {
     return (
       <main className="relative min-h-screen flex items-center justify-center text-slate-400">
         <Background3D variant="deep" className="fixed inset-0 -z-10" />
@@ -137,41 +102,6 @@ export default function AdminPage() {
     );
   }
 
-  if (!code) {
-    return (
-      <main className="relative min-h-screen flex items-center justify-center px-6 py-24">
-        <Background3D variant="deep" className="fixed inset-0 -z-10" />
-        <div className="fixed inset-0 -z-10 bg-[#020617]/50" />
-        <motion.form
-          onSubmit={submitCode}
-          initial={{ opacity: 0, y: 24 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="glass glow-ring rounded-[2.5rem] p-10 w-full max-w-md"
-        >
-          <h1 className="text-3xl font-black tracking-tight text-slate-100">{t("admin.gateTitle")}</h1>
-          <p className="mt-2 text-slate-400">{t("admin.gateSubtitle")}</p>
-          <input
-            type="password"
-            autoFocus
-            value={codeInput}
-            onChange={(e) => setCodeInput(e.target.value)}
-            placeholder={t("admin.gatePlaceholder")}
-            className="input-dark mt-6 w-full px-5 py-4 rounded-2xl font-medium"
-          />
-          {gateError && (
-            <p className="mt-3 text-rose-400 text-sm font-semibold bg-rose-500/10 rounded-xl px-4 py-3">
-              {t("admin.gateError")}
-            </p>
-          )}
-          <button type="submit" className="btn-primary mt-6 w-full py-4 rounded-2xl font-black uppercase tracking-tight">
-            {t("admin.gateEnter")}
-          </button>
-        </motion.form>
-      </main>
-    );
-  }
-
-  // ---- Panel ----
   return (
     <main className="relative min-h-screen text-slate-100 px-5 pt-20 pb-20 sm:px-6 sm:pt-24">
       <Background3D variant="deep" className="fixed inset-0 -z-10" />
@@ -186,7 +116,7 @@ export default function AdminPage() {
             <p className="mt-2 text-slate-400">{t("admin.subtitle")}</p>
           </div>
           <button
-            onClick={lock}
+            onClick={logout}
             className="glass rounded-xl px-4 py-2 text-sm font-bold text-slate-300 hover:bg-white/10 transition-colors shrink-0"
           >
             {t("admin.logout")}

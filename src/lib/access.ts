@@ -6,11 +6,12 @@ import { SignJWT, jwtVerify } from "jose";
 export const ACCESS_COOKIE = "met_access";
 const MAX_AGE_SECONDS = 60 * 60 * 24; // 24 horas
 
-function secretKey(): Uint8Array {
+// Clave de firma compartida (pase de acceso y sesión admin). Edge-safe.
+export function getSigningKey(): Uint8Array {
   const secret = process.env.ACCESS_SECRET;
   if (!secret) {
-    // En producción NO usamos un secreto por defecto: el pase sería falsificable
-    // y cualquiera podría entrar al examen sin pagar.
+    // En producción NO usamos un secreto por defecto: los tokens serían
+    // falsificables (cualquiera entraría al examen sin pagar o al panel admin).
     if (process.env.NODE_ENV === "production") {
       throw new Error("ACCESS_SECRET no está definido. Configúralo en el entorno de producción.");
     }
@@ -24,13 +25,13 @@ export async function signAccessPass(): Promise<string> {
     .setProtectedHeader({ alg: "HS256" })
     .setIssuedAt()
     .setExpirationTime(`${MAX_AGE_SECONDS}s`)
-    .sign(secretKey());
+    .sign(getSigningKey());
 }
 
 export async function hasValidAccess(token: string | undefined): Promise<boolean> {
   if (!token) return false;
   try {
-    const { payload } = await jwtVerify(token, secretKey());
+    const { payload } = await jwtVerify(token, getSigningKey());
     return payload.paid === true;
   } catch {
     return false;

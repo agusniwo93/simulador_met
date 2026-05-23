@@ -1,12 +1,16 @@
 import { NextResponse } from "next/server";
 import fs from "fs";
 import path from "path";
-import { isAdminRequest } from "@/lib/admin";
+import { cookies } from "next/headers";
+import { ADMIN_COOKIE, hasAdminSession } from "@/lib/admin-session";
 import { createQuestionSet, UPLOAD_DIR } from "@/lib/db";
 import { extractPdfText, parseTemplate } from "@/lib/pdf-template";
 
 export async function POST(req: Request) {
-  if (!isAdminRequest(req)) return NextResponse.json({ error: "forbidden" }, { status: 401 });
+  const store = await cookies();
+  if (!(await hasAdminSession(store.get(ADMIN_COOKIE)?.value))) {
+    return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  }
 
   const form = await req.formData().catch(() => null);
   const file = form?.get("file");

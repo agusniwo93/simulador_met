@@ -32,7 +32,7 @@ Abre **http://localhost:3000**.
 ## 🔑 Accesos de prueba
 
 - **Examen**: en la landing pulsa *Comenzar el simulacro* → *Pagar con Mercado Pago* (simulado) → entras al examen.
-- **Panel admin**: ve a `/admin` e ingresa el código **`met-admin-2026`** (configurable en `.env.local` con `ADMIN_CODE`).
+- **Panel admin**: ve a `/admin`. Te redirige a `/admin/login`; ingresa el código **`met-admin-2026`** (configurable en `.env.local` con `ADMIN_CODE`). El acceso queda protegido por una **sesión firmada en cookie** (8 h) verificada en el servidor (middleware) — el código nunca se guarda en el navegador y hay **límite de intentos** anti fuerza bruta.
 
 ---
 
@@ -54,7 +54,7 @@ Abre **http://localhost:3000**.
 
 | Variable | Descripción | Demo |
 |---|---|---|
-| `ADMIN_CODE` | Código de acceso al panel admin | `met-admin-2026` |
+| `ADMIN_CODE` | Código de acceso al panel admin (**requerido en producción**) | `met-admin-2026` |
 | `ACCESS_SECRET` | Secreto para firmar el pase de acceso (genera uno propio) | (incluido) |
 | `NEXT_PUBLIC_BASE_URL` | URL base de la app (para redirecciones de pago) | `http://localhost:3000` |
 | `MERCADOPAGO_ACCESS_TOKEN` | Access Token de Mercado Pago. **Vacío = modo demo** | *(vacío)* |

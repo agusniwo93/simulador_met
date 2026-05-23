@@ -109,6 +109,7 @@ const en = {
     gatePlaceholder: "Admin code",
     gateEnter: "Enter",
     gateError: "Incorrect code.",
+    rateLimited: "Too many attempts. Try again in a few minutes.",
     logout: "Lock panel",
     // Carga de preguntas
     uploadTitle: "Upload questions (PDF)",
@@ -250,6 +251,7 @@ const es: Dict = {
     gatePlaceholder: "Código de administrador",
     gateEnter: "Entrar",
     gateError: "Código incorrecto.",
+    rateLimited: "Demasiados intentos. Inténtalo de nuevo en unos minutos.",
     logout: "Bloquear panel",
     uploadTitle: "Subir preguntas (PDF)",
     uploadDesc: "Sube un PDF que siga la plantilla fija. Las preguntas y su retroalimentación se cargan automáticamente.",

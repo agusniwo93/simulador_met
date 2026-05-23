@@ -1,13 +1,51 @@
-// Compuerta simple del panel admin: un único código compartido (sin cuentas ni sesiones).
-// Se envía en el header "x-admin-code" y se compara con ADMIN_CODE del entorno.
+import { timingSafeEqual } from "crypto";
 
-export const ADMIN_CODE_HEADER = "x-admin-code";
+// Verificación del código de administrador (solo en el endpoint de login, runtime Node).
 
 export function getAdminCode(): string {
-  return process.env.ADMIN_CODE || "met-admin-2026";
+  const code = process.env.ADMIN_CODE;
+  if (!code) {
+    if (process.env.NODE_ENV === "production") {
+      throw new Error("ADMIN_CODE no está definido. Configúralo en el entorno de producción.");
+    }
+    return "met-admin-2026"; // solo desarrollo
+  }
+  return code;
 }
 
-export function isAdminRequest(req: Request): boolean {
-  const provided = req.headers.get(ADMIN_CODE_HEADER) ?? "";
-  return provided.length > 0 && provided === getAdminCode();
+// Comparación en tiempo constante para evitar fuga por timing.
+export function verifyAdminCode(input: string): boolean {
+  const expected = getAdminCode();
+  const a = Buffer.from(input);
+  const b = Buffer.from(expected);
+  if (a.length !== b.length) return false;
+  return timingSafeEqual(a, b);
+}
+
+// ---- Límite de intentos por IP (anti fuerza bruta, en memoria) ----
+const MAX_ATTEMPTS = 5;
+const WINDOW_MS = 10 * 60 * 1000; // 10 minutos
+const attempts = new Map<string, { count: number; first: number }>();
+
+export function isRateLimited(ip: string): boolean {
+  const rec = attempts.get(ip);
+  if (!rec) return false;
+  if (Date.now() - rec.first > WINDOW_MS) {
+    attempts.delete(ip);
+    return false;
+  }
+  return rec.count >= MAX_ATTEMPTS;
+}
+
+export function registerFailedAttempt(ip: string): void {
+  const rec = attempts.get(ip);
+  if (!rec || Date.now() - rec.first > WINDOW_MS) {
+    attempts.set(ip, { count: 1, first: Date.now() });
+  } else {
+    rec.count += 1;
+  }
+}
+
+export function clearAttempts(ip: string): void {
+  attempts.delete(ip);
 }
