@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { motion } from "framer-motion";
 import Background3D from "./Background3D";
 import Dialog from "./Dialog";
@@ -25,13 +25,9 @@ interface Props {
 export default function LandingClient({ hasAccess, autoPay = false, payFailed = false }: Props) {
   const t = useT();
   const router = useRouter();
-  const [payOpen, setPayOpen] = useState(false);
+  // Abrir el diálogo de pago de entrada si llegamos con ?pay=1 o ?pay=failed (y no hay acceso).
+  const [payOpen, setPayOpen] = useState(() => !hasAccess && (autoPay || payFailed));
   const [paying, setPaying] = useState(false);
-
-  // Abrir el diálogo de pago si llegamos con ?pay=1 o ?pay=failed (y no hay acceso).
-  useEffect(() => {
-    if (!hasAccess && (autoPay || payFailed)) setPayOpen(true);
-  }, [hasAccess, autoPay, payFailed]);
 
   const onStart = () => {
     if (hasAccess) router.push("/exam");

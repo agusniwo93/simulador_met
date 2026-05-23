@@ -7,7 +7,15 @@ export const ACCESS_COOKIE = "met_access";
 const MAX_AGE_SECONDS = 60 * 60 * 24; // 24 horas
 
 function secretKey(): Uint8Array {
-  const secret = process.env.ACCESS_SECRET || "met-access-dev-secret-change-me";
+  const secret = process.env.ACCESS_SECRET;
+  if (!secret) {
+    // En producción NO usamos un secreto por defecto: el pase sería falsificable
+    // y cualquiera podría entrar al examen sin pagar.
+    if (process.env.NODE_ENV === "production") {
+      throw new Error("ACCESS_SECRET no está definido. Configúralo en el entorno de producción.");
+    }
+    return new TextEncoder().encode("met-access-dev-secret-change-me");
+  }
   return new TextEncoder().encode(secret);
 }
 

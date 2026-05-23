@@ -111,12 +111,14 @@ export default function Background3D({ variant = "deep", className = "" }: Props
       cancelAnimationFrame(raf);
       window.removeEventListener("mousemove", onMove);
       window.removeEventListener("resize", onResize);
-      renderer.dispose();
       particleGeo.dispose();
       particleMat.dispose();
       geoms.forEach((g) => g.dispose());
       shapes.forEach((s) => (s.material as THREE.Material).dispose());
       if (renderer.domElement.parentNode === mount) mount.removeChild(renderer.domElement);
+      // Liberar el contexto WebGL para evitar agotarlos al navegar entre páginas.
+      renderer.forceContextLoss();
+      renderer.dispose();
     };
   }, [variant]);
 

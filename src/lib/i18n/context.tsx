@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useEffect, useState, useCallback } from "react";
+import { createContext, useContext, useState, useCallback } from "react";
 import type { Lang } from "../types";
 import { dictionaries } from "./dictionaries";
 
@@ -30,13 +30,16 @@ function interpolate(text: string, params?: Params): string {
   return text.replace(/\{(\w+)\}/g, (_, k) => (k in params ? String(params[k]) : `{${k}}`));
 }
 
-export function I18nProvider({ children }: { children: React.ReactNode }) {
-  const [lang, setLangState] = useState<Lang>("es");
-
-  useEffect(() => {
-    const stored = (localStorage.getItem(STORAGE_KEY) as Lang | null) ?? null;
-    if (stored === "en" || stored === "es") setLangState(stored);
-  }, []);
+export function I18nProvider({
+  children,
+  initialLang = "es",
+}: {
+  children: React.ReactNode;
+  initialLang?: Lang;
+}) {
+  // El idioma inicial viene de la cookie (leída en el servidor) para evitar
+  // parpadeo en SSR. setLang luego persiste en localStorage + cookie.
+  const [lang, setLangState] = useState<Lang>(initialLang);
 
   const setLang = useCallback((l: Lang) => {
     setLangState(l);

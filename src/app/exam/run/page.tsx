@@ -130,7 +130,6 @@ export default function ExamRunPage() {
     return () => {
       cancelled = true;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // ---------- Auto-guardado de respuestas ----------
@@ -178,7 +177,6 @@ export default function ExamRunPage() {
     const id = window.setInterval(tick, 1000);
     return () => window.clearInterval(id);
     // NO incluir secondsRemaining en deps: un único intervalo.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase]);
 
   // ---------- Tarea activa y conteo de palabras ----------

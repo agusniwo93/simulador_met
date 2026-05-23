@@ -6,7 +6,7 @@ import { useParams } from "next/navigation";
 import { motion } from "framer-motion";
 import Background3D from "@/components/Background3D";
 import { useI18n } from "@/lib/i18n/context";
-import type { ExamResult, TaskGrade, GrammarIssue, IssueCategory } from "@/lib/types";
+import type { ExamResult, TaskGrade, GrammarIssue } from "@/lib/types";
 
 // ---- Helpers de color según el puntaje (mismas franjas en toda la página) ----
 
