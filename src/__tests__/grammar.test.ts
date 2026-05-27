@@ -1,11 +1,9 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { countWords, gradeAnswer } from "@/lib/grammar";
-import type { ExamTask } from "@/lib/types";
+import { countWords, gradeWriting } from "@/lib/exam/grammar";
+import type { WritingTask } from "@/lib/types";
 
-const task = (minWords: number): ExamTask => ({
-  id: 1,
-  type: "essay",
-  topic: "General",
+const task = (minWords: number): WritingTask => ({
+  id: "w1",
   prompt: "Write about your weekend.",
   feedbackGuide: "",
   minWords,
@@ -37,11 +35,11 @@ describe("countWords", () => {
   });
 });
 
-describe("gradeAnswer", () => {
+describe("gradeWriting", () => {
   it("gives a perfect score for a long, clean answer", async () => {
     vi.stubGlobal("fetch", mockFetch([]));
     const answer = Array(30).fill("word").join(" "); // 30 words
-    const grade = await gradeAnswer(task(20), answer, "en");
+    const grade = await gradeWriting(task(20), answer, "en");
 
     expect(grade.score).toBe(100);
     expect(grade.meetsLength).toBe(true);
@@ -51,7 +49,7 @@ describe("gradeAnswer", () => {
 
   it("returns score 0 for an empty answer", async () => {
     vi.stubGlobal("fetch", mockFetch([]));
-    const grade = await gradeAnswer(task(20), "", "en");
+    const grade = await gradeWriting(task(20), "", "en");
 
     expect(grade.score).toBe(0);
     expect(grade.wordCount).toBe(0);
@@ -60,7 +58,7 @@ describe("gradeAnswer", () => {
 
   it("caps the score at 40 for a severely short answer", async () => {
     vi.stubGlobal("fetch", mockFetch([]));
-    const grade = await gradeAnswer(task(20), "too short", "en"); // 2 words
+    const grade = await gradeWriting(task(20), "too short", "en"); // 2 words
 
     expect(grade.score).toBeLessThanOrEqual(40);
     expect(grade.meetsLength).toBe(false);
@@ -78,7 +76,7 @@ describe("gradeAnswer", () => {
     };
     vi.stubGlobal("fetch", mockFetch([grammarMatch]));
     const answer = Array(30).fill("word").join(" ");
-    const grade = await gradeAnswer(task(20), answer, "en");
+    const grade = await gradeWriting(task(20), answer, "en");
 
     expect(grade.issueCounts.grammar).toBe(1);
     expect(grade.issues).toHaveLength(1);

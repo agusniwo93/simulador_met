@@ -1,24 +1,50 @@
-// Tipos compartidos de toda la plataforma (simulador sin cuentas)
+// Tipos del simulador MET multi-sección (sin cuentas)
 
 export type Lang = "en" | "es";
 
-export type TaskType = "scenario" | "essay";
+export type SectionKind = "writing" | "listening" | "grammar" | "reading";
 
-export interface ExamTask {
-  id: number; // 1..4 dentro del set
-  type: TaskType;
-  topic: string;
+// ---- Contenido del examen ----
+
+export interface WritingTask {
+  id: string;
   prompt: string;
-  feedbackGuide: string; // qué debe incluir una buena respuesta
   minWords: number;
+  feedbackGuide?: string;
 }
 
-export interface QuestionSet {
+// Pregunta de opción múltiple (grammar / reading / listening)
+export interface McqItem {
+  id: string;
+  stem: string; // enunciado / pregunta
+  options: string[]; // 2-4 opciones
+  correctIndex: number;
+  transcript?: string; // solo listening: texto que lee la voz (TTS)
+}
+
+export interface ReadingPassage {
+  id: string;
+  title?: string;
+  text: string;
+  items: McqItem[];
+}
+
+export interface Section {
+  kind: SectionKind;
+  title: string;
+  intro?: string;
+  writingTasks?: WritingTask[]; // kind === "writing"
+  items?: McqItem[]; // kind === "grammar" | "listening"
+  passages?: ReadingPassage[]; // kind === "reading"
+}
+
+export interface Exam {
   id: string;
   title: string;
   createdAt: string;
-  sourceFile?: string; // nombre del PDF original
-  tasks: ExamTask[];
+  durationMinutes: number;
+  sourceFile?: string;
+  sections: Section[];
 }
 
 // ---- Corrección ----
@@ -28,14 +54,14 @@ export type IssueCategory = "grammar" | "spelling" | "style" | "length" | "typog
 export interface GrammarIssue {
   category: IssueCategory;
   message: string;
-  suggestion: string; // reemplazo sugerido (si hay)
-  context: string; // fragmento del texto donde ocurre
+  suggestion: string;
+  context: string;
   offset: number;
   length: number;
 }
 
-export interface TaskGrade {
-  taskId: number;
+export interface WritingGrade {
+  taskId: string;
   prompt: string;
   answer: string;
   wordCount: number;
@@ -44,16 +70,34 @@ export interface TaskGrade {
   issues: GrammarIssue[];
   issueCounts: Record<IssueCategory, number>;
   score: number; // 0..100
-  tips: string[]; // sugerencias de mejora accionables
+  tips: string[];
+}
+
+export interface McqGrade {
+  itemId: string;
+  stem: string;
+  options: string[];
+  correctIndex: number;
+  selectedIndex: number | null;
+  correct: boolean;
+}
+
+export interface SectionResult {
+  kind: SectionKind;
+  title: string;
+  score: number; // 0..100
+  writingGrades?: WritingGrade[];
+  mcqGrades?: McqGrade[];
+  correctCount?: number; // para secciones MCQ
+  totalCount?: number;
 }
 
 export interface ExamResult {
   id: string;
-  questionSetId: string;
+  examId: string;
   studentName: string;
   lang: Lang;
-  answers: Record<string, string>; // taskId -> texto
-  grades: TaskGrade[];
+  sectionResults: SectionResult[];
   overallScore: number; // 0..100
   submittedAt: string;
   autoSubmitted: boolean;
@@ -64,8 +108,7 @@ export interface ExamResult {
 export interface Analytics {
   totalExams: number;
   averageScore: number;
-  scoreBuckets: { excellent: number; good: number; needsWork: number }; // >=80 / 60-79 / <60
-  issueTotals: Record<IssueCategory, number>;
-  taskAverages: { taskId: number; prompt: string; averageScore: number; count: number }[];
+  scoreBuckets: { excellent: number; good: number; needsWork: number };
+  sectionAverages: { kind: SectionKind; title: string; averageScore: number; count: number }[];
   recent: { id: string; studentName: string; overallScore: number; submittedAt: string }[];
 }

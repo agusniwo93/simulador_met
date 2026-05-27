@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useT } from "@/lib/i18n/context";
-import LanguageToggle from "./LanguageToggle";
+import LanguageToggle from "@/components/ui/LanguageToggle";
 
 export default function Navbar() {
   const t = useT();

@@ -3,10 +3,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
-import Background3D from "@/components/Background3D";
+import Background3D from "@/components/visual/Background3D";
 import { useT } from "@/lib/i18n/context";
-import { TEMPLATE_GUIDE } from "@/lib/template-guide";
-import type { QuestionSet, Analytics } from "@/lib/types";
+import { TEMPLATE_GUIDE } from "@/lib/exam/template-guide";
+import type { Exam, Analytics } from "@/lib/types";
 
 type Banner = { kind: "success" | "error"; text: string } | null;
 
@@ -15,7 +15,7 @@ export default function AdminPage() {
   const router = useRouter();
 
   const [loading, setLoading] = useState(true);
-  const [sets, setSets] = useState<QuestionSet[]>([]);
+  const [exams, setExams] = useState<Exam[]>([]);
   const [analytics, setAnalytics] = useState<Analytics | null>(null);
   const [title, setTitle] = useState("");
   const [file, setFile] = useState<File | null>(null);
@@ -23,8 +23,6 @@ export default function AdminPage() {
   const [banner, setBanner] = useState<Banner>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
-  // La sesión va en una cookie HttpOnly (la pone /api/admin/login). No hay
-  // código en el cliente. El middleware ya protege esta ruta y las APIs.
   const loadData = useCallback(async () => {
     const [setsRes, anRes] = await Promise.all([
       fetch("/api/admin/sets"),
@@ -34,7 +32,7 @@ export default function AdminPage() {
       router.replace("/admin/login");
       return;
     }
-    if (setsRes.ok) setSets((await setsRes.json()).sets);
+    if (setsRes.ok) setExams((await setsRes.json()).exams);
     if (anRes.ok) setAnalytics((await anRes.json()).analytics);
   }, [router]);
 
@@ -190,26 +188,36 @@ export default function AdminPage() {
           </pre>
         </section>
 
-        {/* ====== SETS ====== */}
+        {/* ====== EXÁMENES ====== */}
         <section className="glass rounded-3xl p-6 sm:p-8 mt-6">
           <h2 className="text-xl font-black mb-5">{t("admin.setsTitle")}</h2>
-          {sets.length === 0 ? (
+          {exams.length === 0 ? (
             <p className="text-slate-400">{t("admin.noSets")}</p>
           ) : (
             <ul className="space-y-3">
-              {sets.map((s) => (
+              {exams.map((e) => (
                 <li
-                  key={s.id}
+                  key={e.id}
                   className="flex items-center justify-between gap-3 bg-white/[0.03] rounded-2xl px-4 py-4 border border-white/5 sm:px-5"
                 >
                   <div className="min-w-0">
-                    <span className="font-bold break-words">{s.title}</span>
+                    <span className="font-bold break-words">{e.title}</span>
                     <span className="ml-3 text-slate-500 text-sm">
-                      {s.tasks.length} {t("admin.tasks")} · {new Date(s.createdAt).toLocaleDateString()}
+                      {e.sections.length} {t("admin.sections")} · {new Date(e.createdAt).toLocaleDateString()}
                     </span>
+                    <div className="mt-1 flex flex-wrap gap-1.5">
+                      {e.sections.map((s, i) => (
+                        <span
+                          key={i}
+                          className="text-[10px] font-bold uppercase tracking-wider rounded-full bg-white/5 text-cyan-300/80 px-2 py-0.5"
+                        >
+                          {s.title}
+                        </span>
+                      ))}
+                    </div>
                   </div>
                   <button
-                    onClick={() => remove(s.id)}
+                    onClick={() => remove(e.id)}
                     className="shrink-0 text-rose-400 hover:text-rose-300 font-bold text-sm"
                   >
                     {t("admin.delete")}
@@ -242,20 +250,8 @@ function AnalyticsPanel({
     );
   }
 
-  const { totalExams, averageScore, scoreBuckets, issueTotals, taskAverages, recent } = analytics;
+  const { totalExams, averageScore, scoreBuckets, sectionAverages, recent } = analytics;
   const distTotal = scoreBuckets.excellent + scoreBuckets.good + scoreBuckets.needsWork || 1;
-  // Tipografía se agrupa dentro de "Estilo" (igual que en la página de resultados).
-  const issueEntries: [string, number][] = [
-    ["grammar", issueTotals.grammar],
-    ["spelling", issueTotals.spelling],
-    ["style", issueTotals.style + issueTotals.typography],
-  ];
-  const issueMax = Math.max(1, ...issueEntries.map(([, v]) => v));
-  const issueLabel: Record<string, string> = {
-    grammar: t("results.grammar"),
-    spelling: t("results.spelling"),
-    style: t("results.style"),
-  };
 
   const scoreColor = (s: number) =>
     s >= 80 ? "text-emerald-400" : s >= 60 ? "text-amber-400" : "text-rose-400";
@@ -306,42 +302,26 @@ function AnalyticsPanel({
         </div>
       </div>
 
-      {/* Errores comunes */}
-      <div className="mt-6">
-        <h3 className="text-sm font-bold uppercase tracking-wider text-slate-500 mb-3">
-          {t("admin.commonIssues")}
-        </h3>
-        <div className="space-y-2">
-          {issueEntries.map(([cat, val]) => (
-            <div key={cat} className="flex items-center gap-3">
-              <span className="w-24 text-sm text-slate-300">{issueLabel[cat]}</span>
-              <div className="flex-1 h-3 rounded-full bg-white/5 overflow-hidden">
-                <div className="h-full bg-gradient-to-r from-cyan-400 to-indigo-500" style={{ width: `${(val / issueMax) * 100}%` }} />
+      {/* Promedio por sección */}
+      {sectionAverages.length > 0 && (
+        <div className="mt-6">
+          <h3 className="text-sm font-bold uppercase tracking-wider text-slate-500 mb-3">
+            {t("admin.sectionPerformance")}
+          </h3>
+          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
+            {sectionAverages.map((sa) => (
+              <div key={sa.kind} className="bg-white/[0.03] rounded-2xl p-4 border border-white/5">
+                <span className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                  {sa.title}
+                </span>
+                <div className={`mt-1 text-2xl font-black ${scoreColor(sa.averageScore)}`}>
+                  {sa.averageScore}
+                </div>
               </div>
-              <span className="w-8 text-right text-sm font-bold text-slate-300">{val}</span>
-            </div>
-          ))}
+            ))}
+          </div>
         </div>
-      </div>
-
-      {/* Rendimiento por tarea */}
-      <div className="mt-6">
-        <h3 className="text-sm font-bold uppercase tracking-wider text-slate-500 mb-3">
-          {t("admin.taskPerformance")}
-        </h3>
-        <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
-          {taskAverages.map((ta) => (
-            <div key={ta.taskId} className="bg-white/[0.03] rounded-2xl p-4 border border-white/5">
-              <span className="text-xs font-bold uppercase tracking-wider text-slate-500">
-                {t("exam.task")} {ta.taskId}
-              </span>
-              <div className={`mt-1 text-2xl font-black ${scoreColor(ta.averageScore)}`}>
-                {ta.averageScore}
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
+      )}
 
       {/* Exámenes recientes */}
       <div className="mt-6">

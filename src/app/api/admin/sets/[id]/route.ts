@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
-import { ADMIN_COOKIE, hasAdminSession } from "@/lib/admin-session";
-import { deleteQuestionSet } from "@/lib/db";
+import { ADMIN_COOKIE, hasAdminSession } from "@/lib/auth/admin-session";
+import { deleteExam } from "@/lib/db";
 
 export async function DELETE(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const store = await cookies();
@@ -9,6 +9,6 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
   const { id } = await params;
-  const ok = deleteQuestionSet(id);
+  const ok = deleteExam(id);
   return NextResponse.json({ ok });
 }

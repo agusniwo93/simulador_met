@@ -1,6 +1,12 @@
-# ExamBridge MET — Simulador de Writing
+# ExamBridge MET — Simulador
 
-Simulador del examen de **Writing del Michigan English Test (MET)**: 4 tareas con temporizador, corrección automática (gramática, ortografía, estilo y extensión) vía **LanguageTool**, consejos de mejora, panel de administración con analíticas, idiomas **Español / Inglés** y un diseño con fondo 3D animado.
+Simulador del **Michigan English Test (MET)** con examen multi-sección: **Writing, Listening, Grammar y Reading**, con temporizador, corrección automática y resultados por sección. Incluye panel de administración con analíticas, idiomas **Español / Inglés** y diseño con fondo 3D animado.
+
+**Secciones:**
+- **Writing** — tareas de texto libre corregidas con **LanguageTool** (gramática, ortografía, estilo, extensión) + consejos de mejora.
+- **Listening** — el audio se reproduce con la **síntesis de voz del navegador** (TTS) a partir de la transcripción; preguntas de opción múltiple.
+- **Grammar / Reading** — opción múltiple auto-corregida (Reading incluye los textos de lectura).
+- (Speaking y los pasajes que venían como imagen del documento original no están incluidos: requieren grabación de voz / imágenes.)
 
 No usa cuentas de usuario: el alumno entra, **paga el acceso** (Mercado Pago) y rinde el examen. El administrador entra con un **código** para gestionar las preguntas y ver analíticas.
 
@@ -38,9 +44,10 @@ Abre **http://localhost:3000**.
 
 ## ✨ Funciones
 
-- **Simulacro de 4 tareas** con temporizador de 45 min que **no se reinicia al refrescar** (guarda el tiempo y las respuestas en el navegador).
-- **Corrección automática** con LanguageTool: cuenta de palabras vs. mínimo, errores de gramática/ortografía/estilo y **consejos de mejora** por área.
-- **Página de resultados** con puntaje general (gauge), puntaje por tarea, lista de problemas con sugerencias y tips.
+- **Examen multi-sección** (Writing, Listening, Grammar, Reading) con temporizador que **no se reinicia al refrescar** (guarda el tiempo y las respuestas en el navegador).
+- **Corrección automática**: Writing con LanguageTool (palabras vs. mínimo, gramática/ortografía/estilo + consejos); Listening/Grammar/Reading auto-corregidas (opción múltiple).
+- **Listening por voz**: el navegador lee la transcripción en voz alta (TTS); el alumno no ve el texto, solo escucha.
+- **Página de resultados** con puntaje general (gauge), **puntaje por sección**, respuestas correctas/incorrectas reveladas y, en Writing, problemas con sugerencias y tips.
 - **Panel admin** protegido por código:
   - **Subir PDF** con plantilla fija → carga automática de preguntas y su retroalimentación.
   - **Analíticas**: total de exámenes, puntaje promedio, distribución de puntajes, errores más comunes, promedio por tarea y exámenes recientes.

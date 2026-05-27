@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { hasValidAccess, signAccessPass } from "@/lib/access";
+import { hasValidAccess, signAccessPass } from "@/lib/auth/access";
 
 describe("access pass", () => {
   it("signs a pass that validates as true", async () => {

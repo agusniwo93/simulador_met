@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { ACCESS_COOKIE, signAccessPass, accessCookieOptions } from "@/lib/access";
+import { ACCESS_COOKIE, signAccessPass, accessCookieOptions } from "@/lib/auth/access";
 
 function baseUrl(req: Request): string {
   return process.env.NEXT_PUBLIC_BASE_URL || new URL(req.url).origin;

@@ -1,4 +1,4 @@
-import type { ExamTask, GrammarIssue, IssueCategory, TaskGrade, Lang } from "./types";
+import type { WritingTask, GrammarIssue, IssueCategory, WritingGrade, Lang } from "../types";
 
 // Corrección con LanguageTool (API pública gratuita) + puntuación + consejos de mejora.
 
@@ -84,7 +84,7 @@ const TIPS: Record<Lang, Record<IssueCategory | "lengthShort" | "great", string>
   },
 };
 
-export async function gradeAnswer(task: ExamTask, answer: string, uiLang: Lang): Promise<TaskGrade> {
+export async function gradeWriting(task: WritingTask, answer: string, uiLang: Lang): Promise<WritingGrade> {
   const issues = await checkText(answer);
   const wordCount = countWords(answer);
   const meetsLength = wordCount >= task.minWords;

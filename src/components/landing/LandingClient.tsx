@@ -3,8 +3,8 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { motion } from "framer-motion";
-import Background3D from "./Background3D";
-import Dialog from "./Dialog";
+import Background3D from "@/components/visual/Background3D";
+import Dialog from "@/components/ui/Dialog";
 import { useT } from "@/lib/i18n/context";
 
 const fadeUp = {

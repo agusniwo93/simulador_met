@@ -1,16 +1,15 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { z } from "zod";
-import { getQuestionSet, createExamResult } from "@/lib/db";
-import { gradeAnswer } from "@/lib/grammar";
-import { ACCESS_COOKIE, hasValidAccess } from "@/lib/access";
-import type { TaskGrade } from "@/lib/types";
+import { getExam, createExamResult } from "@/lib/db";
+import { gradeExam, type AnswerMap } from "@/lib/exam/grade";
+import { ACCESS_COOKIE, hasValidAccess } from "@/lib/auth/access";
 
 const schema = z.object({
-  questionSetId: z.string(),
+  examId: z.string(),
   studentName: z.string().min(1),
   lang: z.enum(["en", "es"]),
-  answers: z.record(z.string(), z.string()),
+  answers: z.record(z.string(), z.union([z.string(), z.number(), z.null()])),
   autoSubmitted: z.boolean().optional(),
 });
 
@@ -24,23 +23,17 @@ export async function POST(req: Request) {
   const parsed = schema.safeParse(body);
   if (!parsed.success) return NextResponse.json({ error: "invalid" }, { status: 400 });
 
-  const { questionSetId, studentName, lang, answers, autoSubmitted } = parsed.data;
-  const set = getQuestionSet(questionSetId);
-  if (!set) return NextResponse.json({ error: "no_set" }, { status: 404 });
+  const { examId, studentName, lang, answers, autoSubmitted } = parsed.data;
+  const exam = getExam(examId);
+  if (!exam) return NextResponse.json({ error: "no_exam" }, { status: 404 });
 
-  // Corregir cada tarea (en paralelo) con LanguageTool.
-  const grades: TaskGrade[] = await Promise.all(
-    set.tasks.map((task) => gradeAnswer(task, answers[String(task.id)] ?? "", lang))
-  );
-
-  const overallScore = Math.round(grades.reduce((sum, g) => sum + g.score, 0) / (grades.length || 1));
+  const { sectionResults, overallScore } = await gradeExam(exam, answers as AnswerMap, lang);
 
   const result = createExamResult({
-    questionSetId,
+    examId,
     studentName,
     lang,
-    answers,
-    grades,
+    sectionResults,
     overallScore,
     submittedAt: new Date().toISOString(),
     autoSubmitted: autoSubmitted ?? false,

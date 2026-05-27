@@ -1,6 +1,6 @@
 import { cookies } from "next/headers";
-import LandingClient from "@/components/LandingClient";
-import { ACCESS_COOKIE, hasValidAccess } from "@/lib/access";
+import LandingClient from "@/components/landing/LandingClient";
+import { ACCESS_COOKIE, hasValidAccess } from "@/lib/auth/access";
 
 export default async function Home({
   searchParams,

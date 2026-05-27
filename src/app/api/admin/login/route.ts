@@ -5,8 +5,8 @@ import {
   isRateLimited,
   registerFailedAttempt,
   clearAttempts,
-} from "@/lib/admin";
-import { ADMIN_COOKIE, signAdminSession, adminCookieOptions } from "@/lib/admin-session";
+} from "@/lib/auth/admin";
+import { ADMIN_COOKIE, signAdminSession, adminCookieOptions } from "@/lib/auth/admin-session";
 
 const schema = z.object({ code: z.string().min(1).max(200) });
 

@@ -1,6 +1,6 @@
-import type { ExamTask, TaskType } from "./types";
+import type { WritingTask } from "../types";
 
-// Parser de la PLANTILLA FIJA de preguntas en PDF.
+// Parser de la PLANTILLA FIJA de preguntas en PDF (sección de Writing).
 // El admin debe seguir este formato para que la carga sea 100% fiable.
 
 export { TEMPLATE_GUIDE } from "./template-guide";
@@ -24,37 +24,31 @@ function field(block: string, key: string): string {
   return m ? m[1].replace(/\s+/g, " ").trim() : "";
 }
 
-function normalizeType(raw: string): TaskType {
-  return /essay/i.test(raw) ? "essay" : "scenario";
-}
-
 export interface ParsedTemplate {
   title: string;
-  tasks: ExamTask[];
+  tasks: WritingTask[];
 }
 
 export function parseTemplate(text: string): ParsedTemplate {
   const titleMatch = text.match(/TITLE\s*:\s*(.+)/i);
-  const title = titleMatch ? titleMatch[1].trim() : "Imported MET Set";
+  const title = titleMatch ? titleMatch[1].trim() : "Imported MET Writing";
 
   const blocks = [...text.matchAll(/\[TASK\]([\s\S]*?)\[\/TASK\]/gi)].map((m) => m[1]);
 
-  const tasks: ExamTask[] = blocks
-    .map((block, index): ExamTask | null => {
+  const tasks: WritingTask[] = blocks
+    .map((block, index): WritingTask | null => {
       const prompt = field(block, "PROMPT");
       if (!prompt) return null;
       const minWordsRaw = field(block, "MINWORDS");
       const minWords = parseInt(minWordsRaw, 10);
       return {
-        id: index + 1,
-        type: normalizeType(field(block, "TYPE")),
-        topic: field(block, "TOPIC") || "General",
+        id: `w${index + 1}`,
         prompt,
         feedbackGuide: field(block, "FEEDBACK"),
         minWords: Number.isFinite(minWords) ? minWords : 0,
       };
     })
-    .filter((t): t is ExamTask => t !== null);
+    .filter((t): t is WritingTask => t !== null);
 
   return { title, tasks };
 }

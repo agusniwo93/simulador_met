@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { motion } from "framer-motion";
-import Background3D from "@/components/Background3D";
+import Background3D from "@/components/visual/Background3D";
 import { useT } from "@/lib/i18n/context";
 
 export default function AdminLoginPage() {

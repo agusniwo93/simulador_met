@@ -1,19 +1,20 @@
 import fs from "fs";
 import path from "path";
 import { randomUUID } from "crypto";
-import type { QuestionSet, ExamResult, Analytics, IssueCategory } from "./types";
+import type { Exam, ExamResult, Analytics, Section, SectionKind } from "./types";
+import { SEED_SECTIONS, SEED_TITLE, SEED_DURATION } from "./exam/seed-exam";
 
-// Base de datos en archivo (demo). Solo preguntas y resultados — sin cuentas.
+// Base de datos en archivo (demo). Exámenes y resultados — sin cuentas.
 const DATA_DIR = path.join(process.cwd(), "data");
 const DB_FILE = path.join(DATA_DIR, "db.json");
 export const UPLOAD_DIR = path.join(DATA_DIR, "uploads");
 
 interface DB {
-  questionSets: QuestionSet[];
+  exams: Exam[];
   examResults: ExamResult[];
 }
 
-const EMPTY_DB: DB = { questionSets: [], examResults: [] };
+const EMPTY_DB: DB = { exams: [], examResults: [] };
 
 function ensureDirs() {
   if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
@@ -47,35 +48,90 @@ function update<T>(fn: (db: DB) => T): T {
   return result;
 }
 
-// ---------- Sets de preguntas ----------
+// ---------- Distractores de Listening ----------
 
-export function listQuestionSets(): QuestionSet[] {
-  return read().questionSets;
+// PRNG determinista a partir de una cadena (mulberry32).
+function seededRandom(seedStr: string): () => number {
+  let h = 1779033703 ^ seedStr.length;
+  for (let i = 0; i < seedStr.length; i++) {
+    h = Math.imul(h ^ seedStr.charCodeAt(i), 3432918353);
+    h = (h << 13) | (h >>> 19);
+  }
+  let a = h >>> 0;
+  return () => {
+    a |= 0;
+    a = (a + 0x6d2b79f5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
 }
 
-export function getQuestionSet(id: string): QuestionSet | undefined {
-  return read().questionSets.find((q) => q.id === id);
-}
-
-export function getRandomQuestionSet(): QuestionSet | undefined {
-  const sets = read().questionSets;
-  if (sets.length === 0) return undefined;
-  return sets[Math.floor(Math.random() * sets.length)];
-}
-
-export function createQuestionSet(input: Omit<QuestionSet, "id" | "createdAt">): QuestionSet {
-  return update((db) => {
-    const set: QuestionSet = { ...input, id: randomUUID(), createdAt: new Date().toISOString() };
-    db.questionSets.push(set);
-    return set;
+// Para listening, las preguntas vienen con solo la respuesta correcta.
+// Generamos 3 distractores tomando respuestas de otras preguntas de la sección.
+function expandListeningDistractors(sections: Section[]): Section[] {
+  return sections.map((section) => {
+    if (section.kind !== "listening" || !section.items) return section;
+    const pool = Array.from(new Set(section.items.map((it) => it.options[0]).filter(Boolean)));
+    const items = section.items.map((item) => {
+      if (item.options.length >= 4) return item;
+      const correct = item.options[0];
+      const rng = seededRandom(item.id + correct);
+      const candidates = pool.filter((a) => a !== correct);
+      // Barajar candidatos de forma determinista y tomar 3.
+      for (let i = candidates.length - 1; i > 0; i--) {
+        const j = Math.floor(rng() * (i + 1));
+        [candidates[i], candidates[j]] = [candidates[j], candidates[i]];
+      }
+      const distractors = candidates.slice(0, 3);
+      const options = [correct, ...distractors];
+      // Barajar las opciones finales.
+      for (let i = options.length - 1; i > 0; i--) {
+        const j = Math.floor(rng() * (i + 1));
+        [options[i], options[j]] = [options[j], options[i]];
+      }
+      return { ...item, options, correctIndex: options.indexOf(correct) };
+    });
+    return { ...section, items };
   });
 }
 
-export function deleteQuestionSet(id: string): boolean {
+// ---------- Exámenes ----------
+
+export function listExams(): Exam[] {
+  return read().exams;
+}
+
+export function getExam(id: string): Exam | undefined {
+  return read().exams.find((e) => e.id === id);
+}
+
+export function getRandomExam(): Exam | undefined {
+  const exams = read().exams;
+  if (exams.length === 0) return undefined;
+  return exams[Math.floor(Math.random() * exams.length)];
+}
+
+export function createExam(input: { title: string; durationMinutes: number; sourceFile?: string; sections: Section[] }): Exam {
   return update((db) => {
-    const before = db.questionSets.length;
-    db.questionSets = db.questionSets.filter((q) => q.id !== id);
-    return db.questionSets.length < before;
+    const exam: Exam = {
+      id: randomUUID(),
+      title: input.title,
+      durationMinutes: input.durationMinutes,
+      sourceFile: input.sourceFile,
+      sections: expandListeningDistractors(input.sections),
+      createdAt: new Date().toISOString(),
+    };
+    db.exams.push(exam);
+    return exam;
+  });
+}
+
+export function deleteExam(id: string): boolean {
+  return update((db) => {
+    const before = db.exams.length;
+    db.exams = db.exams.filter((e) => e.id !== id);
+    return db.exams.length < before;
   });
 }
 
@@ -99,21 +155,12 @@ export function getAnalytics(): Analytics {
   const results = read().examResults;
   const total = results.length;
 
-  const emptyIssues = (): Record<IssueCategory, number> => ({
-    grammar: 0,
-    spelling: 0,
-    style: 0,
-    length: 0,
-    typography: 0,
-  });
-
   if (total === 0) {
     return {
       totalExams: 0,
       averageScore: 0,
       scoreBuckets: { excellent: 0, good: 0, needsWork: 0 },
-      issueTotals: emptyIssues(),
-      taskAverages: [],
+      sectionAverages: [],
       recent: [],
     };
   }
@@ -127,29 +174,22 @@ export function getAnalytics(): Analytics {
     else scoreBuckets.needsWork++;
   }
 
-  const issueTotals = emptyIssues();
-  const taskAgg = new Map<number, { prompt: string; sum: number; count: number }>();
+  const secAgg = new Map<SectionKind, { title: string; sum: number; count: number }>();
   for (const r of results) {
-    for (const g of r.grades) {
-      (Object.keys(issueTotals) as IssueCategory[]).forEach((k) => {
-        issueTotals[k] += g.issueCounts[k] ?? 0;
-      });
-      const cur = taskAgg.get(g.taskId) ?? { prompt: g.prompt, sum: 0, count: 0 };
-      cur.sum += g.score;
+    for (const s of r.sectionResults) {
+      const cur = secAgg.get(s.kind) ?? { title: s.title, sum: 0, count: 0 };
+      cur.sum += s.score;
       cur.count += 1;
-      cur.prompt = g.prompt;
-      taskAgg.set(g.taskId, cur);
+      cur.title = s.title;
+      secAgg.set(s.kind, cur);
     }
   }
-
-  const taskAverages = [...taskAgg.entries()]
-    .map(([taskId, v]) => ({
-      taskId,
-      prompt: v.prompt,
-      averageScore: Math.round(v.sum / v.count),
-      count: v.count,
-    }))
-    .sort((a, b) => a.taskId - b.taskId);
+  const sectionAverages = [...secAgg.entries()].map(([kind, v]) => ({
+    kind,
+    title: v.title,
+    averageScore: Math.round(v.sum / v.count),
+    count: v.count,
+  }));
 
   const recent = [...results]
     .sort((a, b) => b.submittedAt.localeCompare(a.submittedAt))
@@ -161,58 +201,23 @@ export function getAnalytics(): Analytics {
       submittedAt: r.submittedAt,
     }));
 
-  return { totalExams: total, averageScore, scoreBuckets, issueTotals, taskAverages, recent };
+  return { totalExams: total, averageScore, scoreBuckets, sectionAverages, recent };
 }
 
-// ---------- Seed (set demo en el primer arranque) ----------
+// ---------- Seed ----------
 
 function seed() {
   const db = read();
-  if (db.questionSets.length === 0) {
-    db.questionSets.push({
+  if (db.exams.length === 0) {
+    db.exams.push({
       id: randomUUID(),
-      title: "MET Writing — Demo Set",
+      title: SEED_TITLE,
+      durationMinutes: SEED_DURATION,
+      sections: expandListeningDistractors(SEED_SECTIONS),
       createdAt: new Date().toISOString(),
-      tasks: [
-        {
-          id: 1,
-          type: "scenario",
-          topic: "Daily Routine",
-          prompt: "What time do you usually wake up?",
-          feedbackGuide: "Mention a specific time and a short reason. Use the present simple correctly.",
-          minWords: 20,
-        },
-        {
-          id: 2,
-          type: "scenario",
-          topic: "Daily Routine",
-          prompt: "Why do you wake up at that specific time?",
-          feedbackGuide: "Give a clear cause-effect explanation using 'because' and a reason.",
-          minWords: 20,
-        },
-        {
-          id: 3,
-          type: "scenario",
-          topic: "Daily Routine",
-          prompt: "Is it difficult for you to wake up at that time? Why or why not?",
-          feedbackGuide: "State an opinion and justify it. Use linking words (because, so, although).",
-          minWords: 20,
-        },
-        {
-          id: 4,
-          type: "essay",
-          topic: "Education",
-          prompt:
-            "Some people argue that students should focus only on academic subjects like math and science, while others believe that music and art are equally important for a well-rounded education. What is your opinion? Give reasons to support your answer.",
-          feedbackGuide:
-            "Write a structured essay: introduction with a clear thesis, 2 body paragraphs with examples, and a conclusion. Aim for 150+ words.",
-          minWords: 150,
-        },
-      ],
     });
     write(db);
   }
 }
 
-// Forzar seed al cargar el módulo (idempotente).
 read();

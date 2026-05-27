@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
-import { ADMIN_COOKIE, hasAdminSession } from "@/lib/admin-session";
+import { ADMIN_COOKIE, hasAdminSession } from "@/lib/auth/admin-session";
 import { getAnalytics } from "@/lib/db";
 
 export async function GET() {

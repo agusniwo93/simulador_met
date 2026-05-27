@@ -2,9 +2,9 @@ import { NextResponse } from "next/server";
 import fs from "fs";
 import path from "path";
 import { cookies } from "next/headers";
-import { ADMIN_COOKIE, hasAdminSession } from "@/lib/admin-session";
-import { createQuestionSet, UPLOAD_DIR } from "@/lib/db";
-import { extractPdfText, parseTemplate } from "@/lib/pdf-template";
+import { ADMIN_COOKIE, hasAdminSession } from "@/lib/auth/admin-session";
+import { createExam, UPLOAD_DIR } from "@/lib/db";
+import { extractPdfText, parseTemplate } from "@/lib/exam/pdf-template";
 
 export async function POST(req: Request) {
   const store = await cookies();
@@ -37,11 +37,12 @@ export async function POST(req: Request) {
   const safeName = `${Date.now()}-${(file.name || "set.pdf").replace(/[^\w.-]/g, "_")}`;
   fs.writeFileSync(path.join(UPLOAD_DIR, safeName), buffer);
 
-  const set = createQuestionSet({
+  const exam = createExam({
     title: customTitle || title,
+    durationMinutes: 45,
     sourceFile: safeName,
-    tasks,
+    sections: [{ kind: "writing", title: "Writing", writingTasks: tasks }],
   });
 
-  return NextResponse.json({ set, parsedCount: tasks.length });
+  return NextResponse.json({ exam, parsedCount: tasks.length });
 }

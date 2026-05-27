@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { ACCESS_COOKIE, hasValidAccess } from "@/lib/access";
-import { ADMIN_COOKIE, hasAdminSession } from "@/lib/admin-session";
+import { ACCESS_COOKIE, hasValidAccess } from "@/lib/auth/access";
+import { ADMIN_COOKIE, hasAdminSession } from "@/lib/auth/admin-session";
 
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;

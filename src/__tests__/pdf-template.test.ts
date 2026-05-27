@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseTemplate } from "@/lib/pdf-template";
+import { parseTemplate } from "@/lib/exam/pdf-template";
 
 const VALID_TEMPLATE = `TITLE: Spring MET Practice Set
 
@@ -31,21 +31,18 @@ describe("parseTemplate", () => {
   it("parses the fields of each task correctly", () => {
     const { tasks } = parseTemplate(VALID_TEMPLATE);
 
-    expect(tasks[0].id).toBe(1);
-    expect(tasks[0].type).toBe("scenario");
-    expect(tasks[0].topic).toBe("Workplace");
+    expect(tasks[0].id).toBe("w1");
     expect(tasks[0].prompt).toBe("Write an email to your manager requesting time off.");
+    expect(tasks[0].feedbackGuide).toBe("Should include a greeting, reason, and closing.");
     expect(tasks[0].minWords).toBe(120);
 
-    expect(tasks[1].id).toBe(2);
-    expect(tasks[1].type).toBe("essay");
-    expect(tasks[1].topic).toBe("Technology");
+    expect(tasks[1].id).toBe("w2");
     expect(tasks[1].minWords).toBe(200);
   });
 
   it("falls back to a default title when none is present", () => {
     const { title } = parseTemplate("[TASK]\nPROMPT: Hi.\n[/TASK]");
-    expect(title).toBe("Imported MET Set");
+    expect(title).toBe("Imported MET Writing");
   });
 
   it("skips a block missing a PROMPT", () => {
@@ -68,13 +65,12 @@ MINWORDS: 80
     expect(tasks).toHaveLength(1);
     expect(tasks[0].prompt).toBe("Reply to a customer complaint.");
     // id is derived from the original block index (the 2nd block), not the
-    // post-filter position, so the surviving task keeps id 2.
-    expect(tasks[0].id).toBe(2);
+    // post-filter position, so the surviving task keeps id "w2".
+    expect(tasks[0].id).toBe("w2");
   });
 
   it("defaults minWords to 0 when not a number", () => {
     const { tasks } = parseTemplate("[TASK]\nPROMPT: Something.\n[/TASK]");
     expect(tasks[0].minWords).toBe(0);
-    expect(tasks[0].topic).toBe("General");
   });
 });

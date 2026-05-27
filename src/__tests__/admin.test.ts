@@ -5,7 +5,7 @@ import {
   isRateLimited,
   registerFailedAttempt,
   clearAttempts,
-} from "@/lib/admin";
+} from "@/lib/auth/admin";
 
 afterEach(() => {
   vi.unstubAllEnvs();

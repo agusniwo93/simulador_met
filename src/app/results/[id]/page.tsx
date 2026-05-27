@@ -4,14 +4,20 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { motion } from "framer-motion";
-import Background3D from "@/components/Background3D";
+import Background3D from "@/components/visual/Background3D";
 import { useI18n } from "@/lib/i18n/context";
-import type { ExamResult, TaskGrade, GrammarIssue } from "@/lib/types";
+import type {
+  ExamResult,
+  SectionResult,
+  WritingGrade,
+  McqGrade,
+  GrammarIssue,
+} from "@/lib/types";
 
 // ---- Helpers de color según el puntaje (mismas franjas en toda la página) ----
 
 type Band = {
-  ring: string; // color del trazo del gauge / texto
+  ring: string; // color del trazo del gauge
   text: string; // clase de color de texto Tailwind
   chipBg: string; // fondo de la píldora
   chipText: string;
@@ -48,6 +54,8 @@ function bandFor(score: number): Band {
 
 const MAX_VISIBLE_ISSUES = 8;
 
+type Translate = (path: string, params?: Record<string, string | number>) => string;
+
 const fadeUp = {
   hidden: { opacity: 0, y: 20 },
   show: { opacity: 1, y: 0 },
@@ -64,14 +72,7 @@ function ScoreGauge({ score, color }: { score: number; color: string }) {
   return (
     <div className="relative h-44 w-44 shrink-0">
       <svg viewBox="0 0 160 160" className="h-full w-full -rotate-90">
-        <circle
-          cx="80"
-          cy="80"
-          r={radius}
-          fill="none"
-          stroke="rgba(148,163,184,0.15)"
-          strokeWidth="12"
-        />
+        <circle cx="80" cy="80" r={radius} fill="none" stroke="rgba(148,163,184,0.15)" strokeWidth="12" />
         <motion.circle
           cx="80"
           cy="80"
@@ -97,17 +98,9 @@ function ScoreGauge({ score, color }: { score: number; color: string }) {
   );
 }
 
-// ---- Tarjeta por tarea ----
+// ---- Detalle de una tarea de Writing ----
 
-function TaskCard({
-  grade,
-  index,
-  t,
-}: {
-  grade: TaskGrade;
-  index: number;
-  t: (path: string, params?: Record<string, string | number>) => string;
-}) {
+function WritingGradeCard({ grade, t }: { grade: WritingGrade; t: Translate }) {
   const band = bandFor(grade.score);
 
   // typography se pliega dentro de "style" (no hay clave i18n propia).
@@ -123,26 +116,16 @@ function TaskCard({
   const hiddenCount = grade.issues.length - visibleIssues.length;
 
   return (
-    <motion.section
-      variants={fadeUp}
-      initial="hidden"
-      whileInView="show"
-      viewport={{ once: true, amount: 0.15 }}
-      transition={{ duration: 0.45, delay: Math.min(index * 0.05, 0.3) }}
-      className="glass rounded-2xl p-5 sm:p-6"
-    >
-      {/* Encabezado: Task N + pill de puntaje */}
-      <div className="flex items-center justify-between gap-4">
-        <h3 className="text-lg font-semibold text-slate-100">Task {grade.taskId}</h3>
+    <div className="glass rounded-2xl p-5 sm:p-6">
+      {/* Encabezado: prompt + pill de puntaje */}
+      <div className="flex items-start justify-between gap-4">
+        <p className="flex-1 text-sm leading-relaxed text-slate-300">{grade.prompt}</p>
         <span
-          className={`rounded-full border px-3 py-1 text-sm font-semibold ${band.chipBg} ${band.chipText}`}
+          className={`shrink-0 rounded-full border px-3 py-1 text-sm font-semibold ${band.chipBg} ${band.chipText}`}
         >
           {Math.round(grade.score)} / 100
         </span>
       </div>
-
-      {/* Prompt */}
-      <p className="mt-2 text-sm leading-relaxed text-slate-400">{grade.prompt}</p>
 
       {/* Estado de extensión */}
       <p className="mt-3 text-sm font-medium">
@@ -174,7 +157,7 @@ function TaskCard({
         <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-slate-500">
           {t("results.yourAnswer")}
         </p>
-        <div className="rounded-xl border border-white/10 bg-slate-950/50 p-4 text-sm leading-relaxed text-slate-200 whitespace-pre-wrap">
+        <div className="whitespace-pre-wrap rounded-xl border border-white/10 bg-slate-950/50 p-4 text-sm leading-relaxed text-slate-200">
           {grade.answer.trim() ? grade.answer : "—"}
         </div>
       </div>
@@ -190,10 +173,7 @@ function TaskCard({
             </p>
             <ul className="space-y-3">
               {visibleIssues.map((issue: GrammarIssue, i) => (
-                <li
-                  key={i}
-                  className="rounded-xl border border-white/10 bg-white/[0.03] p-3 text-sm"
-                >
+                <li key={i} className="rounded-xl border border-white/10 bg-white/[0.03] p-3 text-sm">
                   <p className="text-slate-200">{issue.message}</p>
                   {issue.context && (
                     <p className="mt-1 font-mono text-xs text-slate-500">{issue.context}</p>
@@ -207,9 +187,7 @@ function TaskCard({
                 </li>
               ))}
             </ul>
-            {hiddenCount > 0 && (
-              <p className="mt-2 text-xs text-slate-500">+{hiddenCount} more</p>
-            )}
+            {hiddenCount > 0 && <p className="mt-2 text-xs text-slate-500">+{hiddenCount} more</p>}
           </>
         )}
       </div>
@@ -227,6 +205,124 @@ function TaskCard({
           </ul>
         </div>
       )}
+    </div>
+  );
+}
+
+// ---- Detalle de una pregunta MCQ (grammar / listening / reading) ----
+
+function McqGradeCard({ grade, index, t }: { grade: McqGrade; index: number; t: Translate }) {
+  const letters = ["A", "B", "C", "D", "E", "F"];
+  const notAnswered = grade.selectedIndex == null;
+
+  return (
+    <div className="glass rounded-2xl p-5 sm:p-6">
+      <div className="flex items-start justify-between gap-3">
+        <p className="flex-1 whitespace-pre-line text-sm font-medium leading-relaxed text-slate-100 sm:text-base">
+          <span className="mr-1.5 text-slate-500">{index + 1}.</span>
+          {grade.stem}
+        </p>
+        {grade.correct ? (
+          <span className="shrink-0 rounded-full border border-emerald-400/30 bg-emerald-400/15 px-3 py-1 text-xs font-bold text-emerald-300">
+            ✓ {t("results.correct")}
+          </span>
+        ) : (
+          <span className="shrink-0 rounded-full border border-rose-400/30 bg-rose-400/15 px-3 py-1 text-xs font-bold text-rose-300">
+            ✕ {t("results.incorrect")}
+          </span>
+        )}
+      </div>
+
+      <div className="mt-4 space-y-2.5">
+        {grade.options.map((option, idx) => {
+          const isCorrect = idx === grade.correctIndex;
+          const isChosenWrong = idx === grade.selectedIndex && !grade.correct;
+
+          let cls =
+            "flex items-start gap-3 rounded-2xl border px-4 py-3 text-sm text-slate-300 border-white/10 bg-white/[0.02]";
+          if (isCorrect) {
+            cls =
+              "flex items-start gap-3 rounded-2xl border px-4 py-3 text-sm border-emerald-400/40 bg-emerald-400/10 text-emerald-100";
+          } else if (isChosenWrong) {
+            cls =
+              "flex items-start gap-3 rounded-2xl border px-4 py-3 text-sm border-rose-400/40 bg-rose-400/10 text-rose-100";
+          }
+
+          return (
+            <div key={idx} className={cls}>
+              <span
+                className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-bold ${
+                  isCorrect
+                    ? "bg-emerald-500/30 text-emerald-200"
+                    : isChosenWrong
+                    ? "bg-rose-500/30 text-rose-200"
+                    : "bg-white/10 text-slate-400"
+                }`}
+              >
+                {letters[idx] ?? idx + 1}
+              </span>
+              <span className="flex-1 pt-0.5 leading-relaxed">{option}</span>
+              {isCorrect && (
+                <span className="shrink-0 self-center text-[11px] font-semibold uppercase tracking-wide text-emerald-300">
+                  {t("results.correctAnswer")}
+                </span>
+              )}
+              {isChosenWrong && (
+                <span className="shrink-0 self-center text-[11px] font-semibold uppercase tracking-wide text-rose-300">
+                  {t("results.yourChoice")}
+                </span>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      {notAnswered && (
+        <p className="mt-3 text-xs font-semibold text-amber-300">{t("results.notAnswered")}</p>
+      )}
+    </div>
+  );
+}
+
+// ---- Tarjeta de detalle por sección ----
+
+function SectionDetail({
+  section,
+  index,
+  t,
+}: {
+  section: SectionResult;
+  index: number;
+  t: Translate;
+}) {
+  const isWriting = section.kind === "writing";
+  return (
+    <motion.section
+      variants={fadeUp}
+      initial="hidden"
+      whileInView="show"
+      viewport={{ once: true, amount: 0.1 }}
+      transition={{ duration: 0.45, delay: Math.min(index * 0.05, 0.3) }}
+      className="space-y-4"
+    >
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h3 className="text-lg font-semibold text-slate-100">{section.title}</h3>
+        <span
+          className={`rounded-full border px-3 py-1 text-sm font-semibold ${bandFor(section.score).chipBg} ${
+            bandFor(section.score).chipText
+          }`}
+        >
+          {Math.round(section.score)} / 100
+        </span>
+      </div>
+
+      {isWriting
+        ? (section.writingGrades ?? []).map((g) => (
+            <WritingGradeCard key={g.taskId} grade={g} t={t} />
+          ))
+        : (section.mcqGrades ?? []).map((g, i) => (
+            <McqGradeCard key={g.itemId} grade={g} index={i} t={t} />
+          ))}
     </motion.section>
   );
 }
@@ -278,7 +374,7 @@ export default function ResultPage() {
     );
   }
 
-  // ---- No encontrado / sin permiso (403/404) ----
+  // ---- No encontrado ----
   if (status === "error" || !result) {
     return (
       <main className="relative min-h-screen">
@@ -304,13 +400,8 @@ export default function ResultPage() {
 
       <div className="mx-auto w-full max-w-4xl px-5 pt-20 sm:px-6 sm:pt-24">
         {/* Header */}
-        <motion.header
-          variants={fadeUp}
-          initial="hidden"
-          animate="show"
-          transition={{ duration: 0.5 }}
-        >
-          <h1 className="text-3xl sm:text-4xl font-bold tracking-tight text-gradient">
+        <motion.header variants={fadeUp} initial="hidden" animate="show" transition={{ duration: 0.5 }}>
+          <h1 className="text-3xl font-bold tracking-tight text-gradient sm:text-4xl">
             {t("results.title")}
           </h1>
           <p className="mt-2 text-slate-400">{t("results.subtitle")}</p>
@@ -327,7 +418,7 @@ export default function ResultPage() {
           initial="hidden"
           animate="show"
           transition={{ duration: 0.5, delay: 0.1 }}
-          className="glass glow-ring mt-8 flex flex-col items-center gap-6 rounded-3xl p-6 sm:p-8 sm:flex-row sm:justify-between"
+          className="glass glow-ring mt-8 flex flex-col items-center gap-6 rounded-3xl p-6 sm:flex-row sm:justify-between sm:p-8"
         >
           <div className="text-center sm:text-left">
             <p className="text-xs font-semibold uppercase tracking-widest text-slate-500">
@@ -344,28 +435,59 @@ export default function ResultPage() {
           <ScoreGauge score={result.overallScore} color={overall.ring} />
         </motion.section>
 
-        {/* Desglose por tarea */}
+        {/* Puntajes por sección (resumen) */}
         <div className="mt-8">
-          <h2 className="mb-4 text-xl font-semibold text-slate-100">{t("results.perTask")}</h2>
-          <div className="space-y-5">
-            {result.grades.map((grade, i) => (
-              <TaskCard key={grade.taskId} grade={grade} index={i} t={t} />
-            ))}
+          <h2 className="mb-4 text-xl font-semibold text-slate-100">{t("results.sectionScores")}</h2>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            {result.sectionResults.map((s, i) => {
+              const band = bandFor(s.score);
+              const isMcq = s.kind !== "writing";
+              return (
+                <motion.div
+                  key={`${s.kind}-${i}`}
+                  variants={fadeUp}
+                  initial="hidden"
+                  whileInView="show"
+                  viewport={{ once: true, amount: 0.3 }}
+                  transition={{ duration: 0.4, delay: Math.min(i * 0.05, 0.25) }}
+                  className="glass flex items-center justify-between gap-3 rounded-2xl p-4"
+                >
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-semibold text-slate-100">{s.title}</p>
+                    {isMcq && s.totalCount != null && (
+                      <p className="mt-0.5 text-xs text-slate-400">
+                        {t("results.correctOf", {
+                          correct: s.correctCount ?? 0,
+                          total: s.totalCount,
+                        })}
+                      </p>
+                    )}
+                  </div>
+                  <span className={`shrink-0 text-2xl font-bold tabular-nums ${band.text}`}>
+                    {Math.round(s.score)}
+                  </span>
+                </motion.div>
+              );
+            })}
           </div>
         </div>
 
+        {/* Detalle por sección */}
+        <div className="mt-10 space-y-10">
+          {result.sectionResults.map((s, i) => (
+            <SectionDetail key={`detail-${s.kind}-${i}`} section={s} index={i} t={t} />
+          ))}
+        </div>
+
         {/* Acciones de pie */}
-        <div className="mt-10 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:gap-4">
+        <div className="mt-12 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:gap-4">
           <Link
             href="/"
             className="rounded-xl border border-white/15 bg-white/5 px-5 py-2.5 text-center text-sm font-medium text-slate-200 transition hover:bg-white/10"
           >
             {t("results.backToProfile")}
           </Link>
-          <Link
-            href="/exam"
-            className="btn-primary rounded-xl px-6 py-2.5 text-center text-sm font-semibold"
-          >
+          <Link href="/exam" className="btn-primary rounded-xl px-6 py-2.5 text-center text-sm font-semibold">
             {t("results.retake")}
           </Link>
         </div>

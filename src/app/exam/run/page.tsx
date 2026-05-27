@@ -1,17 +1,16 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
-import Background3D from "@/components/Background3D";
-import LanguageToggle from "@/components/LanguageToggle";
-import Dialog from "@/components/Dialog";
+import Background3D from "@/components/visual/Background3D";
+import LanguageToggle from "@/components/ui/LanguageToggle";
+import Dialog from "@/components/ui/Dialog";
 import { useI18n } from "@/lib/i18n/context";
-import type { QuestionSet, ExamTask } from "@/lib/types";
+import type { Exam, Section, McqItem } from "@/lib/types";
 
-// ----- Constantes de almacenamiento y tiempo -----
-const EXAM_DURATION_S = 45 * 60; // 45 minutos
-const LS_SET = "met_exam_set";
+// ----- Claves de almacenamiento -----
+const LS_EXAM = "met_exam";
 const LS_ANSWERS = "met_exam_answers";
 const LS_END = "met_exam_end";
 const LS_NAME = "met_student_name";
@@ -23,93 +22,74 @@ function countWords(text: string): number {
   return trimmed.split(/\s+/).length;
 }
 
-// Formatea segundos a M:SS
-function formatTime(totalSeconds: number): string {
-  const m = Math.floor(totalSeconds / 60);
-  const s = totalSeconds % 60;
-  return `${m}:${String(s).padStart(2, "0")}`;
+// Formatea segundos. Usa H:MM:SS cuando el examen dura >= 60 min, si no M:SS.
+function formatTime(totalSeconds: number, showHours: boolean): string {
+  const s = Math.max(0, totalSeconds);
+  if (showHours) {
+    const h = Math.floor(s / 3600);
+    const m = Math.floor((s % 3600) / 60);
+    const sec = s % 60;
+    return `${h}:${String(m).padStart(2, "0")}:${String(sec).padStart(2, "0")}`;
+  }
+  const m = Math.floor(s / 60);
+  const sec = s % 60;
+  return `${m}:${String(sec).padStart(2, "0")}`;
 }
 
-type Phase = "loading" | "no-sets" | "name-gate" | "exam";
+type Phase = "loading" | "no-exam" | "name-gate" | "exam";
+
+// Valor de una respuesta: texto (writing) o índice de opción (mcq).
+type AnswerValue = string | number;
 
 export default function ExamRunPage() {
   const router = useRouter();
   const { lang, t } = useI18n();
 
   const [phase, setPhase] = useState<Phase>("loading");
-  const [set, setSet] = useState<QuestionSet | null>(null);
+  const [exam, setExam] = useState<Exam | null>(null);
   const [studentName, setStudentName] = useState("");
   const [nameInput, setNameInput] = useState("");
-  const [answers, setAnswers] = useState<Record<string, string>>({});
-  const [activeTaskId, setActiveTaskId] = useState<number | null>(null);
-  const [secondsRemaining, setSecondsRemaining] = useState<number>(EXAM_DURATION_S);
+  const [answers, setAnswers] = useState<Record<string, AnswerValue>>({});
+  const [activeSection, setActiveSection] = useState(0);
+  const [secondsRemaining, setSecondsRemaining] = useState<number | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [errorOpen, setErrorOpen] = useState(false);
+  const [speakingId, setSpeakingId] = useState<string | null>(null);
 
   // Refs para evitar dependencias inestables en intervalos / auto-submit.
   const submittingRef = useRef(false);
   const autoSubmitFiredRef = useRef(false);
   const submitRef = useRef<(auto: boolean) => void>(() => {});
 
-  // ---------- 1) Carga del set de preguntas ----------
+  // ¿Soporta el navegador la Web Speech API? (se calcula tras montar)
+  const [ttsSupported, setTtsSupported] = useState(true);
+  useEffect(() => {
+    setTtsSupported(typeof window !== "undefined" && "speechSynthesis" in window);
+  }, []);
+
+  // ---------- 1) Carga del examen ----------
   useEffect(() => {
     let cancelled = false;
 
-    async function load() {
-      // Reusar set persistido para mantener las MISMAS preguntas tras refrescar.
-      try {
-        const cached = localStorage.getItem(LS_SET);
-        if (cached) {
-          const parsed = JSON.parse(cached) as QuestionSet;
-          if (parsed && Array.isArray(parsed.tasks) && parsed.tasks.length > 0) {
-            if (!cancelled) bootstrap(parsed);
-            return;
-          }
-        }
-      } catch {
-        // Cache corrupto: continuar con el fetch.
-      }
-
-      try {
-        const res = await fetch("/api/exam/set", { cache: "no-store" });
-
-        if (res.status === 404) {
-          if (!cancelled) setPhase("no-sets");
-          return;
-        }
-        if (!res.ok) {
-          if (!cancelled) setPhase("no-sets");
-          return;
-        }
-
-        const data = (await res.json()) as { set: QuestionSet };
-        if (!data?.set || !Array.isArray(data.set.tasks) || data.set.tasks.length === 0) {
-          if (!cancelled) setPhase("no-sets");
-          return;
-        }
-
-        try {
-          localStorage.setItem(LS_SET, JSON.stringify(data.set));
-        } catch {
-          /* ignore quota errors */
-        }
-        if (!cancelled) bootstrap(data.set);
-      } catch {
-        if (!cancelled) setPhase("no-sets");
-      }
+    function isValidExam(value: unknown): value is Exam {
+      return (
+        !!value &&
+        typeof value === "object" &&
+        Array.isArray((value as Exam).sections) &&
+        (value as Exam).sections.length > 0 &&
+        typeof (value as Exam).durationMinutes === "number"
+      );
     }
 
-    // Prepara el estado a partir de un set válido.
-    function bootstrap(qs: QuestionSet) {
-      setSet(qs);
-      setActiveTaskId(qs.tasks[0].id);
+    function bootstrap(ex: Exam) {
+      setExam(ex);
 
       // Restaurar respuestas guardadas.
       try {
         const savedAnswers = localStorage.getItem(LS_ANSWERS);
         if (savedAnswers) {
-          const parsed = JSON.parse(savedAnswers) as Record<string, string>;
+          const parsed = JSON.parse(savedAnswers) as Record<string, AnswerValue>;
           if (parsed && typeof parsed === "object") setAnswers(parsed);
         }
       } catch {
@@ -126,11 +106,55 @@ export default function ExamRunPage() {
       }
     }
 
+    async function load() {
+      // Reusar examen persistido para mantener las MISMAS preguntas tras refrescar.
+      try {
+        const cached = localStorage.getItem(LS_EXAM);
+        if (cached) {
+          const parsed = JSON.parse(cached);
+          if (isValidExam(parsed)) {
+            if (!cancelled) bootstrap(parsed);
+            return;
+          }
+        }
+      } catch {
+        // Cache corrupto: continuar con el fetch.
+      }
+
+      try {
+        const res = await fetch("/api/exam/set", { cache: "no-store" });
+
+        if (res.status === 402) {
+          router.replace("/");
+          return;
+        }
+        if (res.status === 404 || !res.ok) {
+          if (!cancelled) setPhase("no-exam");
+          return;
+        }
+
+        const data = (await res.json()) as { exam: Exam };
+        if (!isValidExam(data?.exam)) {
+          if (!cancelled) setPhase("no-exam");
+          return;
+        }
+
+        try {
+          localStorage.setItem(LS_EXAM, JSON.stringify(data.exam));
+        } catch {
+          /* ignore quota errors */
+        }
+        if (!cancelled) bootstrap(data.exam);
+      } catch {
+        if (!cancelled) setPhase("no-exam");
+      }
+    }
+
     load();
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [router]);
 
   // ---------- Auto-guardado de respuestas ----------
   useEffect(() => {
@@ -144,19 +168,19 @@ export default function ExamRunPage() {
 
   // ---------- 3) Temporizador con timestamp absoluto ----------
   useEffect(() => {
-    if (phase !== "exam") return;
+    if (phase !== "exam" || !exam) return;
+
+    const durationS = exam.durationMinutes * 60;
 
     // Establece el fin absoluto la primera vez que se muestra el examen.
     let endTs: number;
     const stored = localStorage.getItem(LS_END);
     const parsed = stored ? Number(stored) : NaN;
-    if (Number.isFinite(parsed) && parsed > Date.now()) {
-      endTs = parsed;
-    } else if (Number.isFinite(parsed) && parsed <= Date.now() && stored) {
-      // Ya expiró: mantener para que remaining sea 0 y dispare auto-submit.
+    if (Number.isFinite(parsed) && stored) {
+      // Ya existe (vigente o expirado): respetarlo.
       endTs = parsed;
     } else {
-      endTs = Date.now() + EXAM_DURATION_S * 1000;
+      endTs = Date.now() + durationS * 1000;
       try {
         localStorage.setItem(LS_END, String(endTs));
       } catch {
@@ -177,41 +201,72 @@ export default function ExamRunPage() {
     const id = window.setInterval(tick, 1000);
     return () => window.clearInterval(id);
     // NO incluir secondsRemaining en deps: un único intervalo.
-  }, [phase]);
+  }, [phase, exam]);
 
-  // ---------- Tarea activa y conteo de palabras ----------
-  const activeTask: ExamTask | null = useMemo(() => {
-    if (!set || activeTaskId == null) return null;
-    return set.tasks.find((tk) => tk.id === activeTaskId) ?? set.tasks[0];
-  }, [set, activeTaskId]);
+  // ---------- Manejo de respuestas ----------
+  const setWriting = useCallback((taskId: string, value: string) => {
+    setAnswers((prev) => ({ ...prev, [taskId]: value }));
+  }, []);
 
-  const activeAnswer = activeTask ? answers[String(activeTask.id)] ?? "" : "";
-  const wordCount = countWords(activeAnswer);
-  const meetsLength = activeTask ? wordCount >= activeTask.minWords : false;
+  const setChoice = useCallback((itemId: string, optionIndex: number) => {
+    setAnswers((prev) => ({ ...prev, [itemId]: optionIndex }));
+  }, []);
 
-  const handleAnswerChange = useCallback(
-    (value: string) => {
-      if (!activeTask) return;
-      setAnswers((prev) => ({ ...prev, [String(activeTask.id)]: value }));
+  // ---------- Web Speech API (listening) ----------
+  const speak = useCallback(
+    (itemId: string, transcript: string) => {
+      if (!ttsSupported || !transcript) return;
+      try {
+        const u = new SpeechSynthesisUtterance(transcript);
+        u.lang = "en-US";
+        u.rate = 0.95;
+        u.onend = () => setSpeakingId((cur) => (cur === itemId ? null : cur));
+        u.onerror = () => setSpeakingId((cur) => (cur === itemId ? null : cur));
+        speechSynthesis.cancel();
+        speechSynthesis.speak(u);
+        setSpeakingId(itemId);
+      } catch {
+        setSpeakingId(null);
+      }
     },
-    [activeTask]
+    [ttsSupported]
   );
+
+  // Detener cualquier locución al desmontar / cambiar de sección.
+  useEffect(() => {
+    return () => {
+      if (typeof window !== "undefined" && "speechSynthesis" in window) {
+        speechSynthesis.cancel();
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    if (typeof window !== "undefined" && "speechSynthesis" in window) {
+      speechSynthesis.cancel();
+    }
+    setSpeakingId(null);
+  }, [activeSection]);
 
   // ---------- 6) Envío del examen ----------
   const submitExam = useCallback(
     async (autoSubmitted: boolean) => {
-      if (submittingRef.current) return; // 7) guard doble-submit
-      if (!set) return;
+      if (submittingRef.current) return; // guard doble-submit
+      if (!exam) return;
 
       submittingRef.current = true;
       setSubmitting(true);
+
+      if (typeof window !== "undefined" && "speechSynthesis" in window) {
+        speechSynthesis.cancel();
+      }
 
       try {
         const res = await fetch("/api/exam/submit", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            questionSetId: set.id,
+            examId: exam.id,
             studentName,
             lang,
             answers,
@@ -226,7 +281,7 @@ export default function ExamRunPage() {
 
         // Limpieza de almacenamiento al terminar.
         try {
-          localStorage.removeItem(LS_SET);
+          localStorage.removeItem(LS_EXAM);
           localStorage.removeItem(LS_ANSWERS);
           localStorage.removeItem(LS_END);
           localStorage.removeItem(LS_NAME);
@@ -243,7 +298,7 @@ export default function ExamRunPage() {
         setErrorOpen(true);
       }
     },
-    [set, studentName, lang, answers, router]
+    [exam, studentName, lang, answers, router]
   );
 
   // Mantener la ref del submit actualizada para el temporizador.
@@ -273,6 +328,31 @@ export default function ExamRunPage() {
     setPhase("exam");
   }, [nameInput]);
 
+  // ---------- Conteo de respuestas por sección (para el indicador) ----------
+  const sectionAnswered = useCallback(
+    (section: Section): { answered: number; total: number } => {
+      if (section.kind === "writing") {
+        const tasks = section.writingTasks ?? [];
+        const answered = tasks.filter((tk) => countWords(String(answers[tk.id] ?? "")) > 0).length;
+        return { answered, total: tasks.length };
+      }
+      if (section.kind === "reading") {
+        const items = (section.passages ?? []).flatMap((p) => p.items);
+        const answered = items.filter((it) => answers[it.id] != null).length;
+        return { answered, total: items.length };
+      }
+      const items = section.items ?? [];
+      const answered = items.filter((it) => answers[it.id] != null).length;
+      return { answered, total: items.length };
+    },
+    [answers]
+  );
+
+  const totalSections = exam?.sections.length ?? 0;
+  const current = exam?.sections[activeSection] ?? null;
+  const showHours = (exam?.durationMinutes ?? 0) >= 60;
+  const lowTime = secondsRemaining != null && secondsRemaining < 300; // < 5 min
+
   // =========================================================
   // RENDERING
   // =========================================================
@@ -290,8 +370,8 @@ export default function ExamRunPage() {
     );
   }
 
-  // ---- No hay sets ----
-  if (phase === "no-sets") {
+  // ---- No hay examen ----
+  if (phase === "no-exam") {
     return (
       <main className="relative min-h-screen flex items-center justify-center px-6">
         <Background3D variant="deep" className="fixed inset-0 -z-10" />
@@ -304,14 +384,8 @@ export default function ExamRunPage() {
           <div className="mx-auto mb-5 flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-cyan-500/20 to-indigo-500/20 ring-1 ring-white/10 text-2xl">
             📭
           </div>
-          <h1 className="text-xl font-bold text-slate-100">
-            {lang === "es" ? "No hay exámenes disponibles" : "No exams available"}
-          </h1>
-          <p className="mt-3 text-sm leading-relaxed text-slate-400">
-            {lang === "es"
-              ? "Aún no se ha cargado ningún set de preguntas. Vuelve más tarde o contacta a tu administrador."
-              : "No question sets have been created yet. Please check back later or contact your administrator."}
-          </p>
+          <h1 className="text-xl font-bold text-slate-100">{t("exam.noSetsTitle")}</h1>
+          <p className="mt-3 text-sm leading-relaxed text-slate-400">{t("exam.noSetsDesc")}</p>
           <button
             onClick={() => router.push("/")}
             className="mt-6 inline-flex items-center justify-center rounded-2xl px-5 py-2.5 text-sm font-semibold text-slate-200 glass hover:bg-white/10 transition"
@@ -343,9 +417,7 @@ export default function ExamRunPage() {
           </p>
           <h1 className="mt-2 text-2xl font-bold">
             <span className="text-gradient">ExamBridge</span>{" "}
-            <span className="text-slate-300 not-italic text-base font-medium align-middle">
-              Writing Section
-            </span>
+            <span className="text-slate-300 not-italic text-base font-medium align-middle">MET</span>
           </h1>
           <p className="mt-4 text-sm leading-relaxed text-slate-400">{t("exam.enterName")}</p>
 
@@ -377,10 +449,8 @@ export default function ExamRunPage() {
   }
 
   // ---- Vista de examen ----
-  const lowTime = secondsRemaining < 300; // < 5 min
-
   return (
-    <main className="relative min-h-screen">
+    <main className="relative min-h-screen pb-12">
       <Background3D variant="deep" className="fixed inset-0 -z-10" />
 
       {/* ===== Header sticky ===== */}
@@ -393,8 +463,8 @@ export default function ExamRunPage() {
                 Exam<span className="text-cyan-400">Bridge</span>{" "}
                 <span className="not-italic text-cyan-400">MET</span>
               </span>
-              <p className="hidden text-[11px] font-medium uppercase tracking-[0.18em] text-slate-400 sm:block">
-                Writing Section
+              <p className="hidden truncate text-[11px] font-medium uppercase tracking-[0.18em] text-slate-400 sm:block">
+                {exam?.title}
               </p>
             </div>
           </div>
@@ -416,7 +486,7 @@ export default function ExamRunPage() {
               <span className="hidden sm:inline text-[11px] font-medium uppercase tracking-wide text-slate-400">
                 {t("exam.timeRemaining")}
               </span>
-              <span>{formatTime(secondsRemaining)}</span>
+              <span>{formatTime(secondsRemaining ?? 0, showHours)}</span>
             </div>
 
             {/* Finalizar */}
@@ -429,113 +499,251 @@ export default function ExamRunPage() {
             </button>
           </div>
         </div>
+
+        {/* Tab bar de secciones */}
+        <div className="mx-auto max-w-7xl overflow-x-auto px-3 pb-3 sm:px-6">
+          <div className="flex gap-2">
+            {exam?.sections.map((s, i) => {
+              const isActive = i === activeSection;
+              const { answered, total } = sectionAnswered(s);
+              const done = total > 0 && answered >= total;
+              return (
+                <button
+                  key={`${s.kind}-${i}`}
+                  onClick={() => setActiveSection(i)}
+                  aria-pressed={isActive}
+                  className={`group flex shrink-0 items-center gap-2 rounded-full px-3.5 py-1.5 text-xs font-semibold transition-all ${
+                    isActive
+                      ? "bg-gradient-to-r from-cyan-500 to-indigo-600 text-white shadow-[0_8px_24px_-10px_rgba(99,102,241,0.7)]"
+                      : "glass text-slate-300 hover:bg-white/10"
+                  }`}
+                >
+                  <span
+                    className={`h-1.5 w-1.5 rounded-full ${
+                      done ? "bg-emerald-400" : isActive ? "bg-white/80" : "bg-amber-400"
+                    }`}
+                    aria-hidden
+                  />
+                  <span className="max-w-[8rem] truncate sm:max-w-[12rem]">{s.title}</span>
+                  <span className={isActive ? "text-white/70" : "text-slate-500"}>
+                    {answered}/{total}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
       </header>
 
-      {/* ===== Cuerpo: sidebar + panel ===== */}
-      <div className="mx-auto flex max-w-7xl gap-3 px-3 py-5 sm:gap-6 sm:px-6 sm:py-6">
-        {/* Sidebar de tareas */}
-        <nav className="flex flex-col gap-2 sm:gap-3" aria-label="Tasks">
-          {set?.tasks.map((tk) => {
-            const isActive = tk.id === activeTaskId;
-            const taskWords = countWords(answers[String(tk.id)] ?? "");
-            const done = taskWords >= tk.minWords;
-            return (
-              <button
-                key={tk.id}
-                onClick={() => setActiveTaskId(tk.id)}
-                aria-pressed={isActive}
-                className={`relative flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-base font-bold transition-all duration-200 sm:h-14 sm:w-14 sm:rounded-2xl sm:text-lg ${
-                  isActive
-                    ? "scale-110 bg-gradient-to-br from-cyan-500 to-indigo-600 text-white shadow-[0_10px_30px_-10px_rgba(99,102,241,0.7)]"
-                    : "glass text-slate-300 hover:bg-white/10"
-                }`}
-              >
-                {tk.id}
-                {/* Indicador de progreso */}
-                <span
-                  className={`absolute -right-1 -top-1 h-3 w-3 rounded-full ring-2 ring-[#020617] ${
-                    done ? "bg-emerald-400" : "bg-amber-400"
-                  }`}
-                  aria-hidden
-                />
-              </button>
-            );
-          })}
-        </nav>
+      {/* ===== Cuerpo ===== */}
+      <div className="mx-auto w-full max-w-4xl px-3 py-5 sm:px-6 sm:py-7">
+        <AnimatePresence mode="wait">
+          {current && (
+            <motion.section
+              key={activeSection}
+              initial={{ opacity: 0, x: 24 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -24 }}
+              transition={{ duration: 0.28, ease: "easeOut" }}
+            >
+              {/* Encabezado de sección */}
+              <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-cyan-400/80">
+                {t("exam.section")} {activeSection + 1} / {totalSections}
+              </p>
+              <h2 className="mt-1.5 text-xl font-bold text-slate-100 sm:text-2xl">{current.title}</h2>
+              {current.intro && (
+                <p className="mt-2 text-sm leading-relaxed text-slate-400">{current.intro}</p>
+              )}
 
-        {/* Panel principal */}
-        <div className="min-w-0 flex-1">
-          <AnimatePresence mode="wait">
-            {activeTask && (
-              <motion.section
-                key={activeTask.id}
-                initial={{ opacity: 0, x: 24 }}
-                animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: -24 }}
-                transition={{ duration: 0.28, ease: "easeOut" }}
-                className="glass glow-ring rounded-3xl p-5 sm:p-8"
-              >
-                {/* Título + tópico */}
-                <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-cyan-400/80">
-                  {activeTask.topic}
-                </p>
-                <h2 className="mt-1.5 text-xl font-bold text-slate-100 sm:text-2xl">
-                  {activeTask.type === "essay"
-                    ? `${t("exam.task")} ${activeTask.id} — ${t("exam.essay")}`
-                    : `${t("exam.task")} ${activeTask.id}`}
-                </h2>
-
-                {/* Prompt en caja resaltada */}
-                <div className="mt-5 rounded-2xl border border-cyan-400/20 bg-cyan-400/5 p-4 sm:p-5">
-                  <p className="text-sm leading-relaxed text-slate-200 whitespace-pre-line">
-                    {activeTask.prompt}
-                  </p>
+              {/* ----- WRITING ----- */}
+              {current.kind === "writing" && (
+                <div className="mt-6 space-y-7">
+                  {(current.writingTasks ?? []).map((task, n) => {
+                    const value = String(answers[task.id] ?? "");
+                    const words = countWords(value);
+                    const meets = words >= task.minWords;
+                    return (
+                      <div key={task.id} className="glass glow-ring rounded-3xl p-5 sm:p-7">
+                        <h3 className="text-sm font-bold uppercase tracking-wide text-slate-300">
+                          {t("exam.task")} {n + 1}
+                        </h3>
+                        <div className="mt-3 rounded-2xl border border-cyan-400/20 bg-cyan-400/5 p-4 sm:p-5">
+                          <p className="whitespace-pre-line text-sm leading-relaxed text-slate-200">
+                            {task.prompt}
+                          </p>
+                        </div>
+                        <textarea
+                          value={value}
+                          onChange={(e) => setWriting(task.id, e.target.value)}
+                          placeholder={t("exam.placeholder")}
+                          spellCheck={false}
+                          className="input-dark mt-4 min-h-[200px] w-full resize-y rounded-2xl px-4 py-3.5 text-sm leading-relaxed sm:min-h-[280px]"
+                        />
+                        <div className="mt-3 flex justify-end">
+                          <div
+                            className={`inline-flex items-center gap-2 rounded-full px-3.5 py-1.5 text-xs font-semibold ${
+                              meets
+                                ? "bg-emerald-500/15 text-emerald-300 ring-1 ring-emerald-400/30"
+                                : "bg-amber-500/15 text-amber-300 ring-1 ring-amber-400/30"
+                            }`}
+                          >
+                            <span aria-hidden>{meets ? "✓" : "•"}</span>
+                            <span className="tabular-nums">
+                              {words} {t("common.words")}
+                            </span>
+                            <span className="opacity-70">
+                              ({t("common.minWords", { n: task.minWords })})
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
+              )}
 
-                {/* Textarea */}
-                <textarea
-                  value={activeAnswer}
-                  onChange={(e) => handleAnswerChange(e.target.value)}
-                  placeholder={t("exam.placeholder")}
-                  spellCheck={false}
-                  className="input-dark mt-5 min-h-[220px] w-full resize-y rounded-2xl px-4 py-3.5 text-sm leading-relaxed sm:min-h-[340px]"
-                />
+              {/* ----- GRAMMAR ----- */}
+              {current.kind === "grammar" && (
+                <div className="mt-6 space-y-5">
+                  {(current.items ?? []).map((item, n) => (
+                    <McqCard
+                      key={item.id}
+                      item={item}
+                      number={n + 1}
+                      selected={typeof answers[item.id] === "number" ? (answers[item.id] as number) : null}
+                      onSelect={(idx) => setChoice(item.id, idx)}
+                      questionLabel={t("exam.question")}
+                      chooseLabel={t("exam.chooseOption")}
+                    />
+                  ))}
+                </div>
+              )}
 
-                {/* Footer: estudiante + estado / conteo */}
-                <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                  <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs">
-                    <span className="text-slate-400">
-                      {t("exam.student")}:{" "}
-                      <span className="font-semibold text-slate-200">{studentName}</span>
-                    </span>
-                    <span className="inline-flex items-center gap-1.5 text-emerald-400">
-                      <span className="h-2 w-2 animate-pulse rounded-full bg-emerald-400" />
-                      {t("exam.saving")}
-                    </span>
+              {/* ----- LISTENING ----- */}
+              {current.kind === "listening" && (
+                <div className="mt-6">
+                  <div className="rounded-2xl border border-indigo-400/20 bg-indigo-400/5 p-4 text-sm text-slate-300">
+                    🎧 {t("exam.listenHint")}
+                    {!ttsSupported && (
+                      <span className="mt-2 block font-medium text-amber-300">
+                        {t("exam.ttsUnsupported")}
+                      </span>
+                    )}
                   </div>
+                  <div className="mt-5 space-y-5">
+                    {(current.items ?? []).map((item, n) => {
+                      const isSpeaking = speakingId === item.id;
+                      return (
+                        <McqCard
+                          key={item.id}
+                          item={item}
+                          number={n + 1}
+                          selected={
+                            typeof answers[item.id] === "number" ? (answers[item.id] as number) : null
+                          }
+                          onSelect={(idx) => setChoice(item.id, idx)}
+                          questionLabel={t("exam.question")}
+                          chooseLabel={t("exam.chooseOption")}
+                          hideStem={false}
+                          audio={
+                            ttsSupported && item.transcript ? (
+                              <button
+                                onClick={() => speak(item.id, item.transcript!)}
+                                className="inline-flex items-center gap-2 rounded-full bg-gradient-to-r from-cyan-500 to-indigo-600 px-4 py-2 text-xs font-bold text-white shadow-[0_8px_24px_-10px_rgba(99,102,241,0.7)] transition hover:brightness-110 active:scale-95"
+                              >
+                                {isSpeaking ? (
+                                  <>
+                                    <span className="flex items-end gap-0.5" aria-hidden>
+                                      <span className="h-2 w-0.5 animate-pulse bg-white" />
+                                      <span className="h-3 w-0.5 animate-pulse bg-white [animation-delay:120ms]" />
+                                      <span className="h-1.5 w-0.5 animate-pulse bg-white [animation-delay:240ms]" />
+                                    </span>
+                                    {t("exam.listenPlaying")}
+                                  </>
+                                ) : (
+                                  <>
+                                    <span aria-hidden>▶</span>
+                                    {answers[item.id] != null || speakingId
+                                      ? t("exam.listenReplay")
+                                      : t("exam.listenPlay")}
+                                  </>
+                                )}
+                              </button>
+                            ) : null
+                          }
+                        />
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
 
-                  {/* Pill de conteo de palabras */}
-                  <div
-                    className={`inline-flex items-center gap-2 self-start rounded-full px-3.5 py-1.5 text-xs font-semibold sm:self-auto ${
-                      meetsLength
-                        ? "bg-emerald-500/15 text-emerald-300 ring-1 ring-emerald-400/30"
-                        : "bg-amber-500/15 text-amber-300 ring-1 ring-amber-400/30"
-                    }`}
+              {/* ----- READING ----- */}
+              {current.kind === "reading" && (
+                <div className="mt-6 space-y-8">
+                  {(current.passages ?? []).map((passage) => (
+                    <div key={passage.id} className="space-y-5">
+                      <div className="glass rounded-3xl p-5 sm:p-6">
+                        <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-cyan-400/80">
+                          {t("exam.readPassage")}
+                        </p>
+                        {passage.title && (
+                          <h3 className="mt-1 text-lg font-bold text-slate-100">{passage.title}</h3>
+                        )}
+                        <div className="mt-3 max-h-80 overflow-y-auto whitespace-pre-line rounded-2xl border border-white/10 bg-slate-950/50 p-4 text-sm leading-relaxed text-slate-200">
+                          {passage.text}
+                        </div>
+                      </div>
+                      <div className="space-y-5">
+                        {passage.items.map((item, n) => (
+                          <McqCard
+                            key={item.id}
+                            item={item}
+                            number={n + 1}
+                            selected={
+                              typeof answers[item.id] === "number" ? (answers[item.id] as number) : null
+                            }
+                            onSelect={(idx) => setChoice(item.id, idx)}
+                            questionLabel={t("exam.question")}
+                            chooseLabel={t("exam.chooseOption")}
+                          />
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* ----- Navegación prev/next ----- */}
+              <div className="mt-8 flex items-center justify-between gap-3">
+                <button
+                  onClick={() => setActiveSection((i) => Math.max(0, i - 1))}
+                  disabled={activeSection === 0}
+                  className="inline-flex items-center gap-2 rounded-2xl px-5 py-2.5 text-sm font-semibold text-slate-200 glass transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  <span aria-hidden>←</span> {t("exam.prev")}
+                </button>
+
+                {activeSection < totalSections - 1 ? (
+                  <button
+                    onClick={() => setActiveSection((i) => Math.min(totalSections - 1, i + 1))}
+                    className="btn-primary inline-flex items-center gap-2 rounded-2xl px-6 py-2.5 text-sm font-bold"
                   >
-                    <span aria-hidden>{meetsLength ? "✓" : "•"}</span>
-                    <span className="text-slate-300/90">{t("exam.wordCount")}:</span>
-                    <span className="tabular-nums">
-                      {wordCount} {t("common.words")}
-                    </span>
-                    <span className="text-slate-400/70">
-                      ({t("common.minWords", { n: activeTask.minWords })})
-                    </span>
-                  </div>
-                </div>
-              </motion.section>
-            )}
-          </AnimatePresence>
-        </div>
+                    {t("exam.next")} <span aria-hidden>→</span>
+                  </button>
+                ) : (
+                  <button
+                    onClick={handleFinish}
+                    disabled={submitting}
+                    className="inline-flex items-center gap-2 rounded-2xl bg-gradient-to-r from-rose-500 to-red-600 px-6 py-2.5 text-sm font-bold text-white shadow-[0_8px_24px_-8px_rgba(244,63,94,0.7)] transition hover:brightness-110 active:scale-95 disabled:opacity-50"
+                  >
+                    🏁 {t("exam.finish")}
+                  </button>
+                )}
+              </div>
+            </motion.section>
+          )}
+        </AnimatePresence>
       </div>
 
       {/* ===== Overlay de envío ===== */}
@@ -584,5 +792,74 @@ export default function ExamRunPage() {
         onConfirm={() => setErrorOpen(false)}
       />
     </main>
+  );
+}
+
+// ---- Tarjeta MCQ reutilizable (grammar / listening / reading) ----
+function McqCard({
+  item,
+  number,
+  selected,
+  onSelect,
+  questionLabel,
+  chooseLabel,
+  hideStem = false,
+  audio,
+}: {
+  item: McqItem;
+  number: number;
+  selected: number | null;
+  onSelect: (index: number) => void;
+  questionLabel: string;
+  chooseLabel: string;
+  hideStem?: boolean;
+  audio?: React.ReactNode;
+}) {
+  const letters = ["A", "B", "C", "D", "E", "F"];
+  return (
+    <div className="glass glow-ring rounded-3xl p-5 sm:p-6">
+      <div className="flex items-center justify-between gap-3">
+        <span className="text-xs font-bold uppercase tracking-wide text-cyan-400/80">
+          {questionLabel} {number}
+        </span>
+        {audio}
+      </div>
+
+      {/* En listening NO se muestra el transcript: solo el enunciado de la pregunta. */}
+      {!hideStem && (
+        <p className="mt-3 whitespace-pre-line text-sm font-medium leading-relaxed text-slate-100 sm:text-base">
+          {item.stem}
+        </p>
+      )}
+
+      <p className="mt-3 text-xs font-semibold text-slate-400">{chooseLabel}</p>
+      <div className="mt-2 space-y-2.5" role="radiogroup">
+        {item.options.map((option, idx) => {
+          const isSel = selected === idx;
+          return (
+            <button
+              key={idx}
+              role="radio"
+              aria-checked={isSel}
+              onClick={() => onSelect(idx)}
+              className={`flex w-full items-start gap-3 rounded-2xl border px-4 py-3 text-left text-sm transition ${
+                isSel
+                  ? "border-cyan-400/60 bg-cyan-400/10 text-slate-100 ring-1 ring-cyan-400/40"
+                  : "border-white/10 bg-white/[0.03] text-slate-300 hover:border-white/20 hover:bg-white/[0.06]"
+              }`}
+            >
+              <span
+                className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-bold ${
+                  isSel ? "bg-gradient-to-br from-cyan-500 to-indigo-600 text-white" : "bg-white/10 text-slate-400"
+                }`}
+              >
+                {letters[idx] ?? idx + 1}
+              </span>
+              <span className="pt-0.5 leading-relaxed">{option}</span>
+            </button>
+          );
+        })}
+      </div>
+    </div>
   );
 }
