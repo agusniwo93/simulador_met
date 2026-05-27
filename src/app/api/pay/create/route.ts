@@ -1,47 +1,43 @@
 import { NextResponse } from "next/server";
+import Stripe from "stripe";
 
 function baseUrl(req: Request): string {
   return process.env.NEXT_PUBLIC_BASE_URL || new URL(req.url).origin;
 }
 
-// Crea la preferencia de pago de Mercado Pago (Checkout Pro).
-// Sin MERCADOPAGO_ACCESS_TOKEN => modo DEMO (pago simulado).
+// Crea una sesión de Stripe Checkout (incluye pago con tarjeta y con Link).
+// SIN clave => el pago no está configurado y NO se concede acceso.
 export async function POST(req: Request) {
-  const base = baseUrl(req);
-  const token = process.env.MERCADOPAGO_ACCESS_TOKEN;
-  const amount = Number(process.env.PAY_AMOUNT || 15);
-  const currency = process.env.PAY_CURRENCY || "USD";
-
-  if (!token) {
-    return NextResponse.json({ url: `${base}/api/pay/confirm?demo=1`, demo: true });
+  const key = process.env.STRIPE_SECRET_KEY;
+  if (!key) {
+    return NextResponse.json({ error: "not_configured" }, { status: 503 });
   }
 
+  const base = baseUrl(req);
+  const amount = Math.round(Number(process.env.PAY_AMOUNT || 15) * 100);
+  const currency = (process.env.PAY_CURRENCY || "usd").toLowerCase();
+
   try {
-    const res = await fetch("https://api.mercadopago.com/checkout/preferences", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-      body: JSON.stringify({
-        items: [
-          {
-            title: "Acceso ExamBridge MET — Simulacro de Writing",
-            quantity: 1,
-            unit_price: amount,
-            currency_id: currency,
+    const stripe = new Stripe(key);
+    const session = await stripe.checkout.sessions.create({
+      mode: "payment",
+      line_items: [
+        {
+          price_data: {
+            currency,
+            product_data: { name: "Acceso ExamBridge MET — Examen completo" },
+            unit_amount: amount,
           },
-        ],
-        back_urls: {
-          success: `${base}/api/pay/confirm`,
-          failure: `${base}/?pay=failed`,
-          pending: `${base}/?pay=pending`,
+          quantity: 1,
         },
-        auto_return: "approved",
-      }),
+      ],
+      // Stripe ofrece Link automáticamente cuando está habilitado en la cuenta.
+      success_url: `${base}/api/pay/confirm?session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${base}/?pay=failed`,
     });
-    const data = await res.json();
-    const url = data.init_point || data.sandbox_init_point;
-    if (url) return NextResponse.json({ url });
-    return NextResponse.json({ error: "mp_error" }, { status: 500 });
+    if (!session.url) return NextResponse.json({ error: "stripe_error" }, { status: 500 });
+    return NextResponse.json({ url: session.url });
   } catch {
-    return NextResponse.json({ error: "mp_error" }, { status: 500 });
+    return NextResponse.json({ error: "stripe_error" }, { status: 500 });
   }
 }

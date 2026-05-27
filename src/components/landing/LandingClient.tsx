@@ -28,6 +28,7 @@ export default function LandingClient({ hasAccess, autoPay = false, payFailed = 
   // Abrir el diálogo de pago de entrada si llegamos con ?pay=1 o ?pay=failed (y no hay acceso).
   const [payOpen, setPayOpen] = useState(() => !hasAccess && (autoPay || payFailed));
   const [paying, setPaying] = useState(false);
+  const [payError, setPayError] = useState(payFailed);
 
   const onStart = () => {
     if (hasAccess) router.push("/exam");
@@ -36,12 +37,18 @@ export default function LandingClient({ hasAccess, autoPay = false, payFailed = 
 
   const startPayment = async () => {
     setPaying(true);
+    setPayError(false);
     try {
       const res = await fetch("/api/pay/create", { method: "POST" });
       const data = await res.json();
-      if (data.url) window.location.href = data.url;
-      else setPaying(false);
+      if (res.ok && data.url) {
+        window.location.href = data.url;
+        return;
+      }
+      setPayError(true);
+      setPaying(false);
     } catch {
+      setPayError(true);
       setPaying(false);
     }
   };
@@ -156,7 +163,7 @@ export default function LandingClient({ hasAccess, autoPay = false, payFailed = 
           </ul>
         </div>
 
-        {payFailed && (
+        {payError && (
           <p className="mt-4 text-rose-400 text-sm font-semibold bg-rose-500/10 rounded-xl px-4 py-3">
             {t("pay.failed")}
           </p>
