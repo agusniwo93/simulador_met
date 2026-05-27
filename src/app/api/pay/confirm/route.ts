@@ -1,29 +1,29 @@
 import { NextResponse } from "next/server";
-import Stripe from "stripe";
+import { captureOrder } from "@/lib/pay/paypal";
 import { ACCESS_COOKIE, signAccessPass, accessCookieOptions } from "@/lib/auth/access";
 
 function baseUrl(req: Request): string {
   return process.env.NEXT_PUBLIC_BASE_URL || new URL(req.url).origin;
 }
 
-// Stripe redirige aquí tras el checkout. Solo emite el pase si el pago está
-// realmente confirmado (payment_status === "paid"). No hay modo demo.
+// PayPal redirige aquí tras la aprobación (?token=ORDER_ID). Captura la orden y,
+// solo si queda COMPLETED, emite el pase de acceso. No hay modo demo.
 export async function GET(req: Request) {
   const base = baseUrl(req);
-  const key = process.env.STRIPE_SECRET_KEY;
-  const sessionId = new URL(req.url).searchParams.get("session_id");
+  const orderId = new URL(req.url).searchParams.get("token");
 
-  if (!key || !sessionId) {
+  if (!orderId) {
     return NextResponse.redirect(`${base}/?pay=failed`);
   }
 
+  let paid = false;
   try {
-    const stripe = new Stripe(key);
-    const session = await stripe.checkout.sessions.retrieve(sessionId);
-    if (session.payment_status !== "paid") {
-      return NextResponse.redirect(`${base}/?pay=failed`);
-    }
+    paid = await captureOrder(orderId);
   } catch {
+    paid = false;
+  }
+
+  if (!paid) {
     return NextResponse.redirect(`${base}/?pay=failed`);
   }
 

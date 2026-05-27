@@ -1,43 +1,30 @@
 import { NextResponse } from "next/server";
-import Stripe from "stripe";
+import { paypalConfigured, createOrder } from "@/lib/pay/paypal";
 
 function baseUrl(req: Request): string {
   return process.env.NEXT_PUBLIC_BASE_URL || new URL(req.url).origin;
 }
 
-// Crea una sesión de Stripe Checkout (incluye pago con tarjeta y con Link).
-// SIN clave => el pago no está configurado y NO se concede acceso.
+// Crea una orden de PayPal y devuelve la URL de aprobación.
+// SIN credenciales => el pago no está configurado y NO se concede acceso.
 export async function POST(req: Request) {
-  const key = process.env.STRIPE_SECRET_KEY;
-  if (!key) {
+  if (!paypalConfigured()) {
     return NextResponse.json({ error: "not_configured" }, { status: 503 });
   }
 
   const base = baseUrl(req);
-  const amount = Math.round(Number(process.env.PAY_AMOUNT || 15) * 100);
-  const currency = (process.env.PAY_CURRENCY || "usd").toLowerCase();
+  const amount = Number(process.env.PAY_AMOUNT || 15).toFixed(2);
+  const currency = (process.env.PAY_CURRENCY || "USD").toUpperCase();
 
   try {
-    const stripe = new Stripe(key);
-    const session = await stripe.checkout.sessions.create({
-      mode: "payment",
-      line_items: [
-        {
-          price_data: {
-            currency,
-            product_data: { name: "Acceso ExamBridge MET — Examen completo" },
-            unit_amount: amount,
-          },
-          quantity: 1,
-        },
-      ],
-      // Stripe ofrece Link automáticamente cuando está habilitado en la cuenta.
-      success_url: `${base}/api/pay/confirm?session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${base}/?pay=failed`,
+    const url = await createOrder({
+      amount,
+      currency,
+      returnUrl: `${base}/api/pay/confirm`,
+      cancelUrl: `${base}/?pay=failed`,
     });
-    if (!session.url) return NextResponse.json({ error: "stripe_error" }, { status: 500 });
-    return NextResponse.json({ url: session.url });
+    return NextResponse.json({ url });
   } catch {
-    return NextResponse.json({ error: "stripe_error" }, { status: 500 });
+    return NextResponse.json({ error: "paypal_error" }, { status: 500 });
   }
 }

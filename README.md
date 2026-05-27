@@ -8,7 +8,7 @@ Simulador del **Michigan English Test (MET)** con examen multi-sección: **Writi
 - **Grammar / Reading** — opción múltiple auto-corregida (Reading incluye los textos de lectura).
 - (Speaking y los pasajes que venían como imagen del documento original no están incluidos: requieren grabación de voz / imágenes.)
 
-No usa cuentas de usuario: el alumno entra, **paga el acceso** (Stripe — tarjeta o Link) y, solo tras un pago verificado, rinde el examen. El administrador entra con un **código** para gestionar las preguntas y ver analíticas.
+No usa cuentas de usuario: el alumno entra, **paga el acceso** (PayPal) y, solo tras un pago verificado, rinde el examen. El administrador entra con un **código** para gestionar las preguntas y ver analíticas.
 
 ---
 
@@ -21,7 +21,7 @@ Requisitos: **Node.js 20+** (probado en Node 22) y npm.
 npm install
 
 # 2. Crear el archivo de entorno
-#    (copia .env.example a .env.local y pega tu STRIPE_SECRET_KEY)
+#    (copia .env.example a .env.local y pega tus credenciales de PayPal)
 copy .env.example .env.local      # Windows
 # cp .env.example .env.local       # Mac/Linux
 
@@ -31,13 +31,13 @@ npm run dev
 
 Abre **http://localhost:3000**.
 
-> El pago es **obligatorio y real**: solo se entra al examen tras un pago verificado por Stripe. Para probar sin cobrar dinero real, usa una clave **de test** (`sk_test_...`) y la tarjeta de prueba `4242 4242 4242 4242` (cualquier fecha futura y CVC).
+> El pago es **obligatorio y real**: solo se entra al examen tras un pago verificado por PayPal. Para probar sin dinero real, usa credenciales **Sandbox** de PayPal y una cuenta comprador de sandbox.
 
 ---
 
 ## 🔑 Accesos de prueba
 
-- **Examen**: en la landing pulsa *Comenzar el simulacro* → *Pagar de forma segura* (Stripe: tarjeta o Link) → tras el pago entras al examen.
+- **Examen**: en la landing pulsa *Comenzar el simulacro* → *Pagar con PayPal* → tras aprobar el pago entras al examen.
 - **Panel admin**: ve a `/admin`. Te redirige a `/admin/login`; ingresa el código **`met-admin-2026`** (configurable en `.env.local` con `ADMIN_CODE`). El acceso queda protegido por una **sesión firmada en cookie** (8 h) verificada en el servidor (middleware) — el código nunca se guarda en el navegador y hay **límite de intentos** anti fuerza bruta.
 
 ---
@@ -51,7 +51,7 @@ Abre **http://localhost:3000**.
 - **Panel admin** protegido por código:
   - **Subir PDF** con plantilla fija → carga automática de preguntas y su retroalimentación.
   - **Analíticas**: total de exámenes, puntaje promedio, distribución de puntajes, errores más comunes, promedio por tarea y exámenes recientes.
-- **Pago de acceso** con Stripe Checkout (tarjeta o Link), con pase válido por 24 h (cookie firmada, sin cuentas). Solo se concede tras un pago verificado.
+- **Pago de acceso** con PayPal (Orders v2), con pase válido por 24 h (cookie firmada, sin cuentas). Solo se concede tras un pago verificado.
 - **Bilingüe EN/ES** con cambio instantáneo.
 - **Diseño 3D** (three.js) + animaciones (Framer Motion), responsive para móvil y escritorio.
 
@@ -64,7 +64,8 @@ Abre **http://localhost:3000**.
 | `ADMIN_CODE` | Código de acceso al panel admin (**requerido en producción**) | `met-admin-2026` |
 | `ACCESS_SECRET` | Secreto para firmar el pase de acceso (genera uno propio) | (incluido) |
 | `NEXT_PUBLIC_BASE_URL` | URL base de la app (para redirecciones de pago) | `http://localhost:3000` |
-| `STRIPE_SECRET_KEY` | Clave secreta de Stripe (`sk_test_...` o `sk_live_...`). **Requerida**: sin ella no hay acceso | *(vacío)* |
+| `PAYPAL_CLIENT_ID` / `PAYPAL_SECRET` | Credenciales de PayPal. **Requeridas**: sin ellas no hay acceso | *(vacío)* |
+| `PAYPAL_ENV` | `sandbox` (pruebas) o `live` (cobro real) | `sandbox` |
 | `PAY_AMOUNT` | Monto del acceso | `15` |
 | `PAY_CURRENCY` | Moneda (ej. `USD`, `PEN`) | `USD` |
 | `LANGUAGETOOL_API` | Endpoint de LanguageTool | API pública |
@@ -77,19 +78,22 @@ node -e "console.log(require('crypto').randomBytes(48).toString('hex'))"
 
 ---
 
-## 💳 Configurar el pago con Stripe (tarjeta o Link)
+## 💳 Configurar el pago con PayPal
 
-1. Crea/entra a tu cuenta en [Stripe](https://dashboard.stripe.com).
-2. Copia tu **Secret key** (Developers → API keys). Usa `sk_test_...` para pruebas o `sk_live_...` para cobrar de verdad.
-3. Pégala en `.env.local`:
+1. Entra a [PayPal Developer](https://developer.paypal.com) → **Apps & Credentials**.
+2. En **Sandbox** (pruebas) o **Live** (cobro real), crea una app y copia su **Client ID** y **Secret**.
+3. Pégalos en `.env.local`:
    ```
-   STRIPE_SECRET_KEY=sk_test_xxxxxxxx...
+   PAYPAL_ENV=sandbox        # o "live" para cobrar de verdad
+   PAYPAL_CLIENT_ID=AY...
+   PAYPAL_SECRET=EL...
    PAY_AMOUNT=15
-   PAY_CURRENCY=usd
+   PAY_CURRENCY=USD
    ```
-4. Reinicia `npm run dev`. El botón abre el Checkout de Stripe (tarjeta y **Link**); al confirmarse el pago, emite el pase de acceso.
+4. Reinicia `npm run dev`. El botón abre el checkout de PayPal; al aprobar el pago, se captura la orden y se emite el pase de acceso.
+5. Para probar sin dinero real: usa la app **Sandbox** y una **cuenta comprador de sandbox** (PayPal Developer → Sandbox → Accounts).
 
-> El pago se verifica en el servidor (`/api/pay/confirm` consulta la sesión de Stripe y exige `payment_status === "paid"`). **Sin pago confirmado no se entra.** Habilita "Link" en tu cuenta de Stripe (Settings → Payment methods) para que aparezca esa opción.
+> El pago se verifica en el servidor (`/api/pay/confirm` **captura** la orden y exige `status === "COMPLETED"`). **Sin pago confirmado no se entra.**
 
 ---
 
