@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import Background3D from "@/components/visual/Background3D";
 import Dialog from "@/components/ui/Dialog";
@@ -25,10 +25,13 @@ interface Props {
 export default function LandingClient({ hasAccess, autoPay = false, payFailed = false }: Props) {
   const t = useT();
   const router = useRouter();
-  // Abrir el diálogo de pago de entrada si llegamos con ?pay=1 o ?pay=failed (y no hay acceso).
+  
   const [payOpen, setPayOpen] = useState(() => !hasAccess && (autoPay || payFailed));
   const [paying, setPaying] = useState(false);
   const [payError, setPayError] = useState(payFailed);
+
+  const [formToken, setFormToken] = useState<string | null>(null);
+  const [publicKey, setPublicKey] = useState<string | null>(null);
 
   const onStart = () => {
     if (hasAccess) router.push("/exam");
@@ -41,8 +44,11 @@ export default function LandingClient({ hasAccess, autoPay = false, payFailed = 
     try {
       const res = await fetch("/api/pay/create", { method: "POST" });
       const data = await res.json();
-      if (res.ok && data.url) {
-        window.location.href = data.url;
+      
+      if (res.ok && data.formToken && data.publicKey) {
+        setFormToken(data.formToken);
+        setPublicKey(data.publicKey);
+        setPaying(false);
         return;
       }
       setPayError(true);
@@ -52,6 +58,25 @@ export default function LandingClient({ hasAccess, autoPay = false, payFailed = 
       setPaying(false);
     }
   };
+
+  useEffect(() => {
+    if (formToken && publicKey) {
+      const link = document.createElement("link");
+      link.rel = "stylesheet";
+      link.href = "https://static.micuentaweb.pe/static/js/krypton-client/V4.0/ext/classic-reset.css";
+      document.head.appendChild(link);
+
+      const script = document.createElement("script");
+      script.src = "https://static.micuentaweb.pe/static/js/krypton-client/V4.0/stable/kr-payment-form.min.js";
+      script.setAttribute("kr-public-key", publicKey);
+      script.setAttribute("kr-post-url-success", "/api/pay/success");
+      document.head.appendChild(script);
+
+      const themeScript = document.createElement("script");
+      themeScript.src = "https://static.micuentaweb.pe/static/js/krypton-client/V4.0/ext/classic.js";
+      document.head.appendChild(themeScript);
+    }
+  }, [formToken, publicKey]);
 
   const features = [
     { title: t("landing.feature1Title"), desc: t("landing.feature1Desc"), icon: "◈" },
@@ -64,7 +89,6 @@ export default function LandingClient({ hasAccess, autoPay = false, payFailed = 
       <Background3D variant="deep" className="fixed inset-0 -z-10" />
       <div className="fixed inset-0 -z-10 bg-gradient-to-b from-transparent via-[#020617]/40 to-[#020617]" />
 
-      {/* HERO */}
       <section className="max-w-6xl mx-auto px-6 pt-20 pb-16 text-center sm:pt-24 sm:pb-20">
         <motion.span
           custom={0}
@@ -117,7 +141,6 @@ export default function LandingClient({ hasAccess, autoPay = false, payFailed = 
         </motion.div>
       </section>
 
-      {/* FEATURES */}
       <section className="max-w-6xl mx-auto px-6 pb-20 sm:pb-28 grid md:grid-cols-3 gap-5 sm:gap-6">
         {features.map((f, i) => (
           <motion.div
@@ -144,39 +167,46 @@ export default function LandingClient({ hasAccess, autoPay = false, payFailed = 
         </p>
       </footer>
 
-      {/* Diálogo de pago */}
       <Dialog open={payOpen} onClose={() => !paying && setPayOpen(false)} icon="🎓" title={t("pay.title")} description={t("pay.subtitle")}>
-        <div className="rounded-2xl bg-white/[0.03] border border-white/10 p-5">
-          <div className="flex items-baseline justify-between">
-            <span className="text-xs font-bold uppercase tracking-wider text-slate-500">
-              {t("pay.oneTime")}
-            </span>
-            <span className="text-3xl font-black text-gradient">{t("pay.price")}</span>
+        {!formToken ? (
+          <>
+            <div className="rounded-2xl bg-white/[0.03] border border-white/10 p-5">
+              <div className="flex items-baseline justify-between">
+                <span className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                  {t("pay.oneTime")}
+                </span>
+                <span className="text-3xl font-black text-gradient">{t("pay.price")}</span>
+              </div>
+              <ul className="mt-4 space-y-2">
+                {[t("pay.f1"), t("pay.f2"), t("pay.f3")].map((f) => (
+                  <li key={f} className="flex items-start gap-2 text-sm text-slate-300">
+                    <span className="mt-0.5 text-cyan-400 font-black">✓</span>
+                    {f}
+                  </li>
+                ))}
+              </ul>
+            </div>
+
+            {payError && (
+              <p className="mt-4 text-rose-400 text-sm font-semibold bg-rose-500/10 rounded-xl px-4 py-3">
+                {t("pay.failed")}
+              </p>
+            )}
+
+            <button
+              onClick={startPayment}
+              disabled={paying}
+              className="btn-primary mt-5 w-full py-4 rounded-2xl font-black uppercase tracking-tight flex items-center justify-center gap-2 disabled:opacity-50"
+            >
+              {paying ? "Conectando con IziPay..." : "PAGAR CON IZIPAY"}
+            </button>
+            <p className="mt-3 text-center text-xs text-slate-500">Pago 100% seguro.</p>
+          </>
+        ) : (
+          <div className="mt-4 flex flex-col items-center justify-center bg-white rounded-xl p-4 min-h-[300px]">
+             <div className="kr-embedded" {...{ "kr-form-token": formToken }}></div>
           </div>
-          <ul className="mt-4 space-y-2">
-            {[t("pay.f1"), t("pay.f2"), t("pay.f3")].map((f) => (
-              <li key={f} className="flex items-start gap-2 text-sm text-slate-300">
-                <span className="mt-0.5 text-cyan-400 font-black">✓</span>
-                {f}
-              </li>
-            ))}
-          </ul>
-        </div>
-
-        {payError && (
-          <p className="mt-4 text-rose-400 text-sm font-semibold bg-rose-500/10 rounded-xl px-4 py-3">
-            {t("pay.failed")}
-          </p>
         )}
-
-        <button
-          onClick={startPayment}
-          disabled={paying}
-          className="btn-primary mt-5 w-full py-4 rounded-2xl font-black uppercase tracking-tight flex items-center justify-center gap-2 disabled:opacity-50"
-        >
-          {paying ? t("pay.processing") : t("pay.payButton")}
-        </button>
-        <p className="mt-3 text-center text-xs text-slate-500">{t("pay.demoNote")}</p>
       </Dialog>
     </main>
   );

@@ -1,30 +1,39 @@
 import { NextResponse } from "next/server";
-import { paypalConfigured, createOrder } from "@/lib/pay/paypal";
+import { izipayConfigured, createPaymentForm } from "@/lib/pay/izipay";
 
-function baseUrl(req: Request): string {
-  return process.env.NEXT_PUBLIC_BASE_URL || new URL(req.url).origin;
-}
-
-// Crea una orden de PayPal y devuelve la URL de aprobación.
-// SIN credenciales => el pago no está configurado y NO se concede acceso.
-export async function POST(req: Request) {
-  if (!paypalConfigured()) {
-    return NextResponse.json({ error: "not_configured" }, { status: 503 });
-  }
-
-  const base = baseUrl(req);
-  const amount = Number(process.env.PAY_AMOUNT || 15).toFixed(2);
-  const currency = (process.env.PAY_CURRENCY || "USD").toUpperCase();
-
+export async function POST() {
   try {
-    const url = await createOrder({
+    // 1. Verificamos que tus variables del .env existan
+    if (!izipayConfigured()) {
+      console.error("IziPay no está configurado en el .env");
+      return NextResponse.json({ error: "not_configured" }, { status: 500 });
+    }
+
+    // 2. Generamos un código de orden único para este alumno
+    const orderId = `MET-${Date.now()}`;
+    
+    // 3. Tomamos el precio de tu .env (o usamos 15 por defecto)
+    const amount = Number(process.env.PAY_AMOUNT) || 15;
+    const currency = process.env.PAY_CURRENCY || "USD";
+    
+    // IziPay pide un correo, ponemos uno genérico ya que tu sistema no usa cuentas
+    const email = "alumno@simulador-met.com"; 
+
+    // 4. Llamamos a tu motor de IziPay para generar el pase mágico
+    const formToken = await createPaymentForm({
       amount,
       currency,
-      returnUrl: `${base}/api/pay/confirm`,
-      cancelUrl: `${base}/?pay=failed`,
+      orderId,
+      email
     });
-    return NextResponse.json({ url });
-  } catch {
-    return NextResponse.json({ error: "paypal_error" }, { status: 500 });
+
+    // 5. Enviamos la llave pública y el token a la pantalla (LandingClient)
+    const publicKey = process.env.IZIPAY_PUBLIC_KEY;
+
+    return NextResponse.json({ formToken, publicKey });
+    
+  } catch (error: any) {
+    console.error("Error al crear pago IziPay:", error);
+    return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
