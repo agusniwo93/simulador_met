@@ -187,7 +187,7 @@ const es: Dict = {
     subtitle: "Un pago único desbloquea el examen completo (Writing, Listening, Grammar, Reading).",
     oneTime: "Pago único",
     price: "$15 USD",
-    payButton: "Pagar con PayPal",
+    payButton: "Pagar",
     processing: "Redirigiendo al pago...",
     demoNote: "Pago seguro con PayPal.",
     failed: "No se pudo completar el pago. Inténtalo de nuevo.",

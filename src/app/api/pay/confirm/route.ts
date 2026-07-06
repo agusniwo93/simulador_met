@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { captureOrder } from "@/lib/pay/paypal";
+import { captureOrder } from "@/lib/pay/izipay";
 import { ACCESS_COOKIE, signAccessPass, accessCookieOptions } from "@/lib/auth/access";
 
 function baseUrl(req: Request): string {
