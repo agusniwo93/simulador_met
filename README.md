@@ -37,7 +37,7 @@ Abre **http://localhost:3000**.
 
 ## 🔑 Accesos de prueba
 
-- **Examen**: en la landing pulsa *Comenzar el simulacro* → *Pagar con PayPal* → tras aprobar el pago entras al examen.
+- **Examen**: en la landing pulsa *Comenzar el simulacro* → *Pagar con IziPay* → tras aprobar el pago entras al examen.
 - **Panel admin**: ve a `/admin`. Te redirige a `/admin/login`; ingresa el código **`met-admin-2026`** (configurable en `.env.local` con `ADMIN_CODE`). El acceso queda protegido por una **sesión firmada en cookie** (8 h) verificada en el servidor (middleware) — el código nunca se guarda en el navegador y hay **límite de intentos** anti fuerza bruta.
 
 ---
