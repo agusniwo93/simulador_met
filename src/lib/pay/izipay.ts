@@ -23,18 +23,19 @@ export async function createPaymentForm(opts: {
   
   // 3. IziPay lee los precios en céntimos (ej. 50 Soles = 5000 céntimos)
   const amountInCents = Math.round(opts.amount * 100);
-  // 604 es el código internacional para Soles Peruanos
-  const currencyCode = opts.currency === "PEN" ? "604" : "840"; 
 
-  // 4. Armamos el paquete de datos que le enviaremos a IziPay
+  // 4. Armamos el paquete de datos que le enviaremos a IziPay (Forzando Dólares)
   const payload = {
     amount: amountInCents,
-    currency: currencyCode,
+    currency: "USD", 
     orderId: opts.orderId,
     customer: { email: opts.email },
     actionMode: "INTERACTIVE", // Para que muestre un formulario visual
     paymentMode: "SINGLE"      // Para que sea un solo cobro (no suscripción)
   };
+
+  // Imprime en los logs de Render el paquete exacto para revisarlo
+  console.log("=== ENVIANDO A IZIPAY ===", JSON.stringify(payload, null, 2));
 
   // 5. Nos comunicamos con IziPay
   const res = await fetch(`${IZIPAY_API_URL}/api-payment/V4/Charge/CreatePayment`, {
@@ -60,11 +61,8 @@ export async function createPaymentForm(opts: {
   return data.answer.formToken; 
   
 }
+
 export async function captureOrder(orderId: string | null): Promise<boolean> {
   if (!orderId) return false;
-  
-  // IziPay procesa y confirma los pagos de forma diferente a PayPal. 
-  // Para mantener la compatibilidad con tu sistema actual, si IziPay 
-  // nos redirige de vuelta a esta ruta con un token, daremos luz verde (true).
   return true;
 }
