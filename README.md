@@ -8,7 +8,7 @@ Simulador del **Michigan English Test (MET)** con examen multi-sección: **Writi
 - **Grammar / Reading** — opción múltiple auto-corregida (Reading incluye los textos de lectura).
 - (Speaking y los pasajes que venían como imagen del documento original no están incluidos: requieren grabación de voz / imágenes.)
 
-No usa cuentas de usuario: el alumno entra, **paga el acceso** (PayPal) y, solo tras un pago verificado, rinde el examen. El administrador entra con un **código** para gestionar las preguntas y ver analíticas.
+No usa cuentas de usuario: el alumno entra, **paga el acceso** (IziPay) y, solo tras un pago verificado, rinde el examen. El administrador entra con un **código** para gestionar las preguntas y ver analíticas.
 
 ---
 
@@ -21,7 +21,7 @@ Requisitos: **Node.js 20+** (probado en Node 22) y npm.
 npm install
 
 # 2. Crear el archivo de entorno
-#    (copia .env.example a .env.local y pega tus credenciales de PayPal)
+#    (copia .env.example a .env.local y pega tus credenciales de IziPay)
 copy .env.example .env.local      # Windows
 # cp .env.example .env.local       # Mac/Linux
 
@@ -31,7 +31,7 @@ npm run dev
 
 Abre **http://localhost:3000**.
 
-> El pago es **obligatorio y real**: solo se entra al examen tras un pago verificado por PayPal. Para probar sin dinero real, usa credenciales **Sandbox** de PayPal y una cuenta comprador de sandbox.
+> El pago es **obligatorio**: solo se entra al examen tras un pago verificado por IziPay.
 
 ---
 
@@ -64,8 +64,8 @@ Abre **http://localhost:3000**.
 | `ADMIN_CODE` | Código de acceso al panel admin (**requerido en producción**) | `met-admin-2026` |
 | `ACCESS_SECRET` | Secreto para firmar el pase de acceso (genera uno propio) | (incluido) |
 | `NEXT_PUBLIC_BASE_URL` | URL base de la app (para redirecciones de pago) | `http://localhost:3000` |
-| `PAYPAL_CLIENT_ID` / `PAYPAL_SECRET` | Credenciales de PayPal. **Requeridas**: sin ellas no hay acceso | *(vacío)* |
-| `PAYPAL_ENV` | `sandbox` (pruebas) o `live` (cobro real) | `sandbox` |
+| `IZIPAY_SHOP_ID` / `IZIPAY_API_KEY` | Credenciales REST de IziPay. **Requeridas**: sin ellas no hay acceso | *(vacío)* |
+| `IZIPAY_PUBLIC_KEY` | Clave pública de IziPay (se envía al formulario de pago) | *(vacío)* |
 | `PAY_AMOUNT` | Monto del acceso | `15` |
 | `PAY_CURRENCY` | Moneda (ej. `USD`, `PEN`) | `USD` |
 | `LANGUAGETOOL_API` | Endpoint de LanguageTool | API pública |
@@ -78,22 +78,21 @@ node -e "console.log(require('crypto').randomBytes(48).toString('hex'))"
 
 ---
 
-## 💳 Configurar el pago con PayPal
+## 💳 Configurar el pago con IziPay
 
-1. Entra a [PayPal Developer](https://developer.paypal.com) → **Apps & Credentials**.
-2. En **Sandbox** (pruebas) o **Live** (cobro real), crea una app y copia su **Client ID** y **Secret**.
-3. Pégalos en `.env.local`:
+1. Entra a tu panel de [IziPay](https://secure.micuentaweb.pe) → **Configuración** → **Claves de API REST**.
+2. Copia el **Shop ID** (identificador de tienda), la **Clave API REST** y la **Clave pública**.
+3. Pégalas en `.env.local`:
    ```
-   PAYPAL_ENV=sandbox        # o "live" para cobrar de verdad
-   PAYPAL_CLIENT_ID=AY...
-   PAYPAL_SECRET=EL...
+   IZIPAY_SHOP_ID=...
+   IZIPAY_API_KEY=...
+   IZIPAY_PUBLIC_KEY=...
    PAY_AMOUNT=15
    PAY_CURRENCY=USD
    ```
-4. Reinicia `npm run dev`. El botón abre el checkout de PayPal; al aprobar el pago, se captura la orden y se emite el pase de acceso.
-5. Para probar sin dinero real: usa la app **Sandbox** y una **cuenta comprador de sandbox** (PayPal Developer → Sandbox → Accounts).
+4. Reinicia `npm run dev`. El botón genera un `formToken` con IziPay y abre el formulario de pago incrustado; al aprobar el pago se emite el pase de acceso.
 
-> El pago se verifica en el servidor (`/api/pay/confirm` **captura** la orden y exige `status === "COMPLETED"`). **Sin pago confirmado no se entra.**
+> El pago se procesa contra la API REST de IziPay (`https://api.micuentaweb.pe`). **Sin pago confirmado no se entra.**
 
 ---
 

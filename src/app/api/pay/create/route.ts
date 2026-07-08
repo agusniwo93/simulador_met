@@ -32,8 +32,9 @@ export async function POST() {
 
     return NextResponse.json({ formToken, publicKey });
     
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error al crear pago IziPay:", error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    const message = error instanceof Error ? error.message : "Error desconocido";
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }
