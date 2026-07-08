@@ -55,6 +55,12 @@ function bandFor(score: number): Band {
 
 const MAX_VISIBLE_ISSUES = 8;
 
+// Extensión del archivo de audio a partir de su URL (para el nombre de descarga).
+function extOf(url: string): string {
+  const m = url.match(/\.(webm|ogg|mp4|mp3|wav)(?:\?|$)/i);
+  return m ? `.${m[1].toLowerCase()}` : ".webm";
+}
+
 type Translate = (path: string, params?: Record<string, string | number>) => string;
 
 const fadeUp = {
@@ -299,7 +305,16 @@ function SpeakingResponseCard({ resp, index, t }: { resp: SpeakingResponse; inde
           {t("results.yourRecording")}
         </p>
         {resp.audioUrl ? (
-          <audio controls src={resp.audioUrl} className="w-full max-w-md" />
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+            <audio controls src={resp.audioUrl} className="w-full max-w-md" />
+            <a
+              href={resp.audioUrl}
+              download={`speaking-task-${index + 1}${extOf(resp.audioUrl)}`}
+              className="inline-flex shrink-0 items-center gap-1.5 rounded-xl border border-white/15 bg-white/5 px-4 py-2 text-sm font-semibold text-slate-200 transition hover:bg-white/10"
+            >
+              ⬇ {t("results.download")}
+            </a>
+          </div>
         ) : (
           <p className="text-sm font-medium text-amber-300">{t("results.noRecording")}</p>
         )}

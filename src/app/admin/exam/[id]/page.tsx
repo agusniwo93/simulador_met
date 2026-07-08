@@ -19,6 +19,28 @@ function emptyMcq(): McqItem {
   return { id: newId("q"), stem: "", options: ["", ""], correctIndex: 0 };
 }
 
+const SECTION_LABELS: Record<Section["kind"], string> = {
+  writing: "Writing",
+  listening: "Listening",
+  grammar: "Grammar",
+  reading: "Reading",
+  speaking: "Speaking",
+};
+
+function blankSection(kind: Section["kind"]): Section {
+  const base = { kind, title: SECTION_LABELS[kind] };
+  switch (kind) {
+    case "writing":
+      return { ...base, writingTasks: [{ id: newId("w"), prompt: "", minWords: 20, feedbackGuide: "" }] };
+    case "reading":
+      return { ...base, passages: [{ id: newId("p"), title: "", text: "", items: [emptyMcq()] }] };
+    case "speaking":
+      return { ...base, speakingTasks: [{ id: newId("sp"), prompt: "" }] };
+    default: // grammar | listening
+      return { ...base, items: [emptyMcq()] };
+  }
+}
+
 export default function ExamEditorPage() {
   const router = useRouter();
   const params = useParams<{ id: string }>();
@@ -54,6 +76,14 @@ export default function ExamEditorPage() {
       const sections = prev.sections.map((s, i) => (i === idx ? updater(s) : s));
       return { ...prev, sections };
     });
+  }, []);
+
+  const removeSection = useCallback((idx: number) => {
+    setExam((prev) => (prev ? { ...prev, sections: prev.sections.filter((_, i) => i !== idx) } : prev));
+  }, []);
+
+  const addSection = useCallback((kind: Section["kind"]) => {
+    setExam((prev) => (prev ? { ...prev, sections: [...prev.sections, blankSection(kind)] } : prev));
   }, []);
 
   const save = useCallback(async () => {
@@ -165,8 +195,25 @@ export default function ExamEditorPage() {
               key={`${section.kind}-${sIdx}`}
               section={section}
               onChange={(updater) => patchSection(sIdx, updater)}
+              onRemove={() => removeSection(sIdx)}
             />
           ))}
+
+          {/* Añadir sección */}
+          <div className="glass rounded-3xl p-5">
+            <p className="mb-3 text-sm font-bold text-slate-300">Añadir sección</p>
+            <div className="flex flex-wrap gap-2">
+              {(Object.keys(SECTION_LABELS) as Section["kind"][]).map((kind) => (
+                <button
+                  key={kind}
+                  onClick={() => addSection(kind)}
+                  className="glass rounded-xl px-4 py-2 text-sm font-bold text-cyan-300 hover:bg-white/10"
+                >
+                  + {SECTION_LABELS[kind]}
+                </button>
+              ))}
+            </div>
+          </div>
         </div>
       </div>
 
@@ -203,9 +250,11 @@ export default function ExamEditorPage() {
 function SectionEditor({
   section,
   onChange,
+  onRemove,
 }: {
   section: Section;
   onChange: (updater: (s: Section) => Section) => void;
+  onRemove: () => void;
 }) {
   const count =
     section.kind === "writing"
@@ -218,14 +267,26 @@ function SectionEditor({
 
   return (
     <section className="glass rounded-3xl p-5 sm:p-6">
-      <div className="flex items-center justify-between gap-3 mb-4">
-        <h2 className="text-lg font-black">
-          {section.title}{" "}
-          <span className="ml-1 text-xs font-bold uppercase tracking-wider text-cyan-300/70">
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+        <div className="flex items-center gap-2">
+          <input
+            value={section.title}
+            onChange={(e) => onChange((s) => ({ ...s, title: e.target.value }))}
+            className="input-dark rounded-lg px-3 py-1.5 text-lg font-black"
+          />
+          <span className="text-xs font-bold uppercase tracking-wider text-cyan-300/70">
             {section.kind}
           </span>
-        </h2>
-        <span className="text-xs text-slate-500">{count} preguntas</span>
+        </div>
+        <div className="flex items-center gap-3">
+          <span className="text-xs text-slate-500">{count} preguntas</span>
+          <button
+            onClick={onRemove}
+            className="text-rose-400 hover:text-rose-300 text-xs font-bold"
+          >
+            Eliminar sección
+          </button>
+        </div>
       </div>
 
       {section.kind === "writing" && <WritingEditor section={section} onChange={onChange} />}

@@ -84,6 +84,18 @@ export default function AdminPage() {
     await loadData();
   };
 
+  const createExam = async () => {
+    const res = await fetch("/api/admin/sets", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({}),
+    });
+    if (res.ok) {
+      const { exam } = (await res.json()) as { exam: Exam };
+      router.push(`/admin/exam/${exam.id}`);
+    }
+  };
+
   if (loading) {
     return (
       <main className="relative min-h-screen flex items-center justify-center text-slate-400">
@@ -170,7 +182,15 @@ export default function AdminPage() {
 
         {/* ====== EXÁMENES ====== */}
         <section className="glass rounded-3xl p-6 sm:p-8 mt-6">
-          <h2 className="text-xl font-black mb-5">{t("admin.setsTitle")}</h2>
+          <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+            <h2 className="text-xl font-black">{t("admin.setsTitle")}</h2>
+            <button
+              onClick={createExam}
+              className="btn-primary rounded-xl px-4 py-2.5 text-sm font-black uppercase tracking-tight"
+            >
+              + {t("admin.createExam")}
+            </button>
+          </div>
           {exams.length === 0 ? (
             <p className="text-slate-400">{t("admin.noSets")}</p>
           ) : (
@@ -459,7 +479,8 @@ function AnalyticsPanel({
               <tr className="text-left text-slate-500 text-xs uppercase tracking-wider">
                 <th className="py-2 pr-4">{t("admin.student")}</th>
                 <th className="py-2 pr-4">{t("admin.score")}</th>
-                <th className="py-2">{t("admin.date")}</th>
+                <th className="py-2 pr-4">{t("admin.date")}</th>
+                <th className="py-2"></th>
               </tr>
             </thead>
             <tbody>
@@ -467,7 +488,17 @@ function AnalyticsPanel({
                 <tr key={r.id} className="border-t border-white/5">
                   <td className="py-2.5 pr-4 font-semibold text-slate-200">{r.studentName}</td>
                   <td className={`py-2.5 pr-4 font-black ${scoreColor(r.overallScore)}`}>{r.overallScore}/100</td>
-                  <td className="py-2.5 text-slate-400">{new Date(r.submittedAt).toLocaleString()}</td>
+                  <td className="py-2.5 pr-4 text-slate-400">{new Date(r.submittedAt).toLocaleString()}</td>
+                  <td className="py-2.5 text-right">
+                    <a
+                      href={`/results/${r.id}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="font-bold text-cyan-300 hover:text-cyan-200"
+                    >
+                      {t("admin.viewResult")}
+                    </a>
+                  </td>
                 </tr>
               ))}
             </tbody>

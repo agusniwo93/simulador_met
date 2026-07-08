@@ -132,6 +132,7 @@ const en = {
     manualReview: "Manual review",
     yourRecording: "Your recording",
     noRecording: "No recording submitted",
+    download: "Download",
   },
   admin: {
     title: "Admin panel",
@@ -160,6 +161,7 @@ const en = {
     delete: "Delete",
     edit: "Edit",
     preview: "Preview",
+    createExam: "New exam",
     setTitle: "Set title",
     downloadTemplate: "Download template guide",
     // Analítica
@@ -172,6 +174,7 @@ const en = {
     student: "Student",
     score: "Score",
     date: "Date",
+    viewResult: "View / recordings",
     noData: "No exam data yet. Analytics will appear once students take the exam.",
     refresh: "Refresh",
   },
@@ -309,6 +312,7 @@ const es: Dict = {
     manualReview: "Revisión manual",
     yourRecording: "Tu grabación",
     noRecording: "Sin grabación enviada",
+    download: "Descargar",
     correctOf: "{correct} / {total} correctas",
   },
   admin: {
@@ -336,6 +340,7 @@ const es: Dict = {
     delete: "Eliminar",
     edit: "Editar",
     preview: "Vista previa",
+    createExam: "Crear examen",
     setTitle: "Título del set",
     downloadTemplate: "Descargar guía de plantilla",
     analyticsTitle: "Analíticas",
@@ -347,6 +352,7 @@ const es: Dict = {
     student: "Estudiante",
     score: "Puntaje",
     date: "Fecha",
+    viewResult: "Ver / grabaciones",
     noData: "Aún no hay datos. Las analíticas aparecerán cuando los estudiantes rindan el examen.",
     refresh: "Actualizar",
   },

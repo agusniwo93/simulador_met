@@ -233,25 +233,29 @@ export default function LandingClient({ hasAccess, autoPay = false, payFailed = 
           </>
         ) : (
           <div className="flex flex-col gap-4">
-            <div className="flex items-baseline justify-between gap-3">
-              <span className="text-sm font-bold text-slate-200">{t("pay.cardDetails")}</span>
+            <div className="flex items-center justify-between gap-3 rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3">
+              <span className="flex items-center gap-2 text-sm font-bold text-slate-200">
+                <span aria-hidden>💳</span> {t("pay.cardDetails")}
+              </span>
               <span className="text-lg font-black text-gradient">{t("pay.price")}</span>
             </div>
-            <div className="rounded-2xl bg-white p-3 shadow-inner sm:p-4">
+            <div className="rounded-2xl bg-white p-4 shadow-[inset_0_1px_0_rgba(0,0,0,0.05)] ring-1 ring-black/5 sm:p-5">
               <div className="kr-embedded" {...{ "kr-form-token": formToken }}></div>
             </div>
-            <button
-              onClick={() => {
-                setFormToken(null);
-                setPublicKey(null);
-              }}
-              className="w-full rounded-2xl px-5 py-3 text-sm font-bold text-slate-400 transition hover:bg-white/5 hover:text-slate-200"
-            >
-              ← {t("pay.back")}
-            </button>
-            <p className="flex items-center justify-center gap-1.5 text-center text-xs text-slate-500">
-              <span aria-hidden>🔒</span> {t("pay.demoNote")}
-            </p>
+            <div className="flex items-center justify-between gap-3">
+              <button
+                onClick={() => {
+                  setFormToken(null);
+                  setPublicKey(null);
+                }}
+                className="rounded-2xl px-4 py-2.5 text-sm font-bold text-slate-400 transition hover:bg-white/5 hover:text-slate-200"
+              >
+                ← {t("pay.back")}
+              </button>
+              <span className="flex items-center gap-1.5 text-xs text-slate-500">
+                <span aria-hidden>🔒</span> {t("pay.demoNote")}
+              </span>
+            </div>
           </div>
         )}
       </Dialog>
