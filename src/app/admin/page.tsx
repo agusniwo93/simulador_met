@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import Background3D from "@/components/visual/Background3D";
 import { useT } from "@/lib/i18n/context";
-import { TEMPLATE_GUIDE } from "@/lib/exam/template-guide";
 import type { Exam, Analytics, ThemeSettings } from "@/lib/types";
 import { DEFAULT_THEME } from "@/lib/types";
 
@@ -83,16 +82,6 @@ export default function AdminPage() {
   const remove = async (id: string) => {
     await fetch(`/api/admin/sets/${id}`, { method: "DELETE" });
     await loadData();
-  };
-
-  const downloadTemplate = () => {
-    const blob = new Blob([TEMPLATE_GUIDE], { type: "text/plain" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "met-template.txt";
-    a.click();
-    URL.revokeObjectURL(url);
   };
 
   if (loading) {
@@ -179,22 +168,6 @@ export default function AdminPage() {
           </form>
         </motion.section>
 
-        {/* ====== TEMPLATE ====== */}
-        <section className="glass rounded-3xl p-6 sm:p-8 mt-6">
-          <div className="flex flex-wrap items-center justify-between gap-3 sm:gap-4">
-            <h2 className="text-xl font-black">{t("admin.templateTitle")}</h2>
-            <button
-              onClick={downloadTemplate}
-              className="glass rounded-xl px-4 py-2 text-sm font-bold text-cyan-300 hover:bg-white/10 transition-colors"
-            >
-              {t("admin.downloadTemplate")}
-            </button>
-          </div>
-          <pre className="mt-4 bg-black/30 border border-white/10 rounded-2xl p-5 text-xs text-slate-300 overflow-x-auto font-mono leading-relaxed">
-            {TEMPLATE_GUIDE}
-          </pre>
-        </section>
-
         {/* ====== EXÁMENES ====== */}
         <section className="glass rounded-3xl p-6 sm:p-8 mt-6">
           <h2 className="text-xl font-black mb-5">{t("admin.setsTitle")}</h2>
@@ -224,6 +197,12 @@ export default function AdminPage() {
                     </div>
                   </div>
                   <div className="flex shrink-0 items-center gap-3">
+                    <button
+                      onClick={() => router.push(`/admin/exam/${e.id}/preview`)}
+                      className="text-slate-300 hover:text-white font-bold text-sm"
+                    >
+                      {t("admin.preview")}
+                    </button>
                     <button
                       onClick={() => router.push(`/admin/exam/${e.id}`)}
                       className="text-cyan-300 hover:text-cyan-200 font-bold text-sm"

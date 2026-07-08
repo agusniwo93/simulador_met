@@ -124,6 +124,12 @@ export default function ExamEditorPage() {
               <span className="text-gradient">Editar examen</span>
             </h1>
           </div>
+          <button
+            onClick={() => router.push(`/admin/exam/${id}/preview`)}
+            className="glass shrink-0 rounded-xl px-4 py-2 text-sm font-bold text-slate-200 hover:bg-white/10"
+          >
+            👁 Vista previa
+          </button>
         </div>
 
         {/* Datos generales */}

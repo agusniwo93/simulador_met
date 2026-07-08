@@ -159,6 +159,7 @@ const en = {
     sections: "sections",
     delete: "Delete",
     edit: "Edit",
+    preview: "Preview",
     setTitle: "Set title",
     downloadTemplate: "Download template guide",
     // Analítica
@@ -334,6 +335,7 @@ const es: Dict = {
     sections: "secciones",
     delete: "Eliminar",
     edit: "Editar",
+    preview: "Vista previa",
     setTitle: "Título del set",
     downloadTemplate: "Descargar guía de plantilla",
     analyticsTitle: "Analíticas",
