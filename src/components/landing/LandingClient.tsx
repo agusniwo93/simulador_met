@@ -69,7 +69,7 @@ export default function LandingClient({ hasAccess, autoPay = false, payFailed = 
       const script = document.createElement("script");
       script.src = "https://static.micuentaweb.pe/static/js/krypton-client/V4.0/stable/kr-payment-form.min.js";
       script.setAttribute("kr-public-key", publicKey);
-      script.setAttribute("kr-post-url-success", "/pago-exitoso");
+      script.setAttribute("kr-post-url-success", "/api/pay/confirm");
       document.head.appendChild(script);
 
       const themeScript = document.createElement("script");
