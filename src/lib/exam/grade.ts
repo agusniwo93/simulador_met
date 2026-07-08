@@ -4,6 +4,7 @@ import type {
   McqGrade,
   SectionResult,
   WritingGrade,
+  SpeakingResponse,
   Lang,
 } from "../types";
 import { gradeWriting } from "./grammar";
@@ -70,11 +71,30 @@ export async function gradeExam(
         correctCount: mcqGrades.filter((g) => g.correct).length,
         totalCount: mcqGrades.length,
       });
+    } else if (section.kind === "speaking" && section.speakingTasks) {
+      // Speaking: solo guardamos las grabaciones (URL en la respuesta). No se
+      // auto-califica y no cuenta en el puntaje general.
+      const speakingResponses: SpeakingResponse[] = section.speakingTasks.map((task) => {
+        const val = answers[task.id];
+        return {
+          taskId: task.id,
+          prompt: task.prompt,
+          audioUrl: typeof val === "string" && val ? val : null,
+        };
+      });
+      sectionResults.push({
+        kind: section.kind,
+        title: section.title,
+        score: 0,
+        autoScored: false,
+        speakingResponses,
+      });
     }
   }
 
-  const overallScore = sectionResults.length
-    ? Math.round(sectionResults.reduce((s, r) => s + r.score, 0) / sectionResults.length)
+  const scored = sectionResults.filter((r) => r.autoScored !== false);
+  const overallScore = scored.length
+    ? Math.round(scored.reduce((s, r) => s + r.score, 0) / scored.length)
     : 0;
 
   return { sectionResults, overallScore };

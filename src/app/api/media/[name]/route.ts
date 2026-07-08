@@ -11,6 +11,12 @@ const CONTENT_TYPES: Record<string, string> = {
   ".jpeg": "image/jpeg",
   ".webp": "image/webp",
   ".gif": "image/gif",
+  // Audio (grabaciones de Speaking)
+  ".webm": "audio/webm",
+  ".ogg": "audio/ogg",
+  ".mp4": "audio/mp4",
+  ".mp3": "audio/mpeg",
+  ".wav": "audio/wav",
 };
 
 export async function GET(_req: Request, { params }: { params: Promise<{ name: string }> }) {

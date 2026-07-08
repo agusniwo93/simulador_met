@@ -3,7 +3,7 @@ import type { Section } from "../types";
 export const SEED_TITLE = "Simulador MET 4";
 export const SEED_DURATION = 90; // minutos
 export const SEED_ID = "seed-met-4"; // id estable para poder re-sembrar sin duplicar
-export const SEED_VERSION = 2; // súbelo cuando cambie el contenido del seed
+export const SEED_VERSION = 3; // súbelo cuando cambie el contenido del seed
 
 export const SEED_SECTIONS: Section[] = [
   // ---------------------------------------------------------------------------
@@ -997,6 +997,42 @@ export const SEED_SECTIONS: Section[] = [
             correctIndex: 0,
           },
         ],
+      },
+    ],
+  },
+
+  // ---------------------------------------------------------------------------
+  // SPEAKING (grabación de voz — no auto-calificado, revisión manual)
+  // ---------------------------------------------------------------------------
+  {
+    kind: "speaking",
+    title: "Speaking",
+    intro:
+      "Graba tu respuesta en voz para cada tarea. Las grabaciones se guardan para revisión (esta sección no se califica automáticamente).",
+    speakingTasks: [
+      {
+        id: "sp1",
+        prompt: "Task 1 — Describe the picture.",
+        imageUrl: "/seed/speaking-1.jpeg",
+      },
+      {
+        id: "sp2",
+        prompt: "Task 2 — Tell me about a time when you visited a library or a quiet place to study.",
+      },
+      {
+        id: "sp3",
+        prompt:
+          "Task 3 — Some people prefer studying in quiet places such as libraries. Others prefer studying at home or in places with more noise. Which do you prefer? Give your opinion and reasons to support it.",
+      },
+      {
+        id: "sp4",
+        prompt:
+          "Task 4 — Your school is planning to keep the library open later in the evening so students can study after classes. They want students to help organize books and keep the place clean. What are the advantages and disadvantages of this idea?",
+      },
+      {
+        id: "sp5",
+        prompt:
+          "Task 5 — A local school is planning to require all students to spend one hour each week in the library reading or studying. Some students think this rule is unnecessary because they already study at home. I am the school principal. Tell me what you think about this and try to convince me to agree with you.",
       },
     ],
   },

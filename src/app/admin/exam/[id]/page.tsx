@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Background3D from "@/components/visual/Background3D";
-import type { Exam, Section, McqItem, WritingTask, ReadingPassage } from "@/lib/types";
+import type { Exam, Section, McqItem, WritingTask, ReadingPassage, SpeakingTask } from "@/lib/types";
 
 type Banner = { kind: "success" | "error"; text: string } | null;
 
@@ -204,9 +204,11 @@ function SectionEditor({
   const count =
     section.kind === "writing"
       ? section.writingTasks?.length ?? 0
-      : section.kind === "reading"
-        ? (section.passages ?? []).reduce((n, p) => n + p.items.length, 0)
-        : section.items?.length ?? 0;
+      : section.kind === "speaking"
+        ? section.speakingTasks?.length ?? 0
+        : section.kind === "reading"
+          ? (section.passages ?? []).reduce((n, p) => n + p.items.length, 0)
+          : section.items?.length ?? 0;
 
   return (
     <section className="glass rounded-3xl p-5 sm:p-6">
@@ -225,6 +227,7 @@ function SectionEditor({
         <McqListEditor section={section} onChange={onChange} listening={section.kind === "listening"} />
       )}
       {section.kind === "reading" && <ReadingEditor section={section} onChange={onChange} />}
+      {section.kind === "speaking" && <SpeakingEditor section={section} onChange={onChange} />}
     </section>
   );
 }
@@ -302,6 +305,126 @@ function WritingEditor({
       >
         + Añadir tarea
       </button>
+    </div>
+  );
+}
+
+// ============================================================
+// Speaking (tareas con prompt e imagen opcional)
+// ============================================================
+function SpeakingEditor({
+  section,
+  onChange,
+}: {
+  section: Section;
+  onChange: (updater: (s: Section) => Section) => void;
+}) {
+  const tasks = section.speakingTasks ?? [];
+  const setTasks = (next: SpeakingTask[]) => onChange((s) => ({ ...s, speakingTasks: next }));
+  const patchTask = (i: number, patch: Partial<SpeakingTask>) =>
+    setTasks(tasks.map((t, idx) => (idx === i ? { ...t, ...patch } : t)));
+  const addTask = () => setTasks([...tasks, { id: newId("sp"), prompt: "" }]);
+  const removeTask = (i: number) => setTasks(tasks.filter((_, idx) => idx !== i));
+
+  return (
+    <div className="space-y-4">
+      <p className="text-xs text-slate-500">
+        Speaking se graba en voz y no se califica automáticamente (revisión manual).
+      </p>
+      {tasks.map((task, i) => (
+        <SpeakingTaskEditor
+          key={task.id}
+          task={task}
+          number={i + 1}
+          onChange={(patch) => patchTask(i, patch)}
+          onRemove={() => removeTask(i)}
+        />
+      ))}
+      <button
+        onClick={addTask}
+        className="glass rounded-xl px-4 py-2.5 text-sm font-bold text-cyan-300 hover:bg-white/10"
+      >
+        + Añadir tarea de speaking
+      </button>
+    </div>
+  );
+}
+
+function SpeakingTaskEditor({
+  task,
+  number,
+  onChange,
+  onRemove,
+}: {
+  task: SpeakingTask;
+  number: number;
+  onChange: (patch: Partial<SpeakingTask>) => void;
+  onRemove: () => void;
+}) {
+  const [uploading, setUploading] = useState(false);
+
+  const uploadImage = async (file: File) => {
+    setUploading(true);
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      const res = await fetch("/api/admin/media", { method: "POST", body: fd });
+      if (res.ok) {
+        const { url } = (await res.json()) as { url: string };
+        onChange({ imageUrl: url });
+      }
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  return (
+    <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+      <div className="flex items-center justify-between mb-2">
+        <span className="text-xs font-bold uppercase tracking-wide text-slate-400">Tarea {number}</span>
+        <button onClick={onRemove} className="text-rose-400 hover:text-rose-300 text-xs font-bold">
+          Eliminar
+        </button>
+      </div>
+      <textarea
+        value={task.prompt}
+        onChange={(e) => onChange({ prompt: e.target.value })}
+        placeholder="Consigna de la tarea de speaking"
+        className="input-dark w-full px-3 py-2.5 rounded-xl text-sm min-h-[70px]"
+      />
+      <div className="mt-3 rounded-xl border border-white/10 bg-black/20 p-3">
+        <div className="flex flex-wrap items-center gap-3">
+          <label className="glass rounded-lg px-3 py-2 text-xs font-bold cursor-pointer hover:bg-white/10">
+            {uploading ? "Subiendo…" : task.imageUrl ? "Cambiar imagen" : "Subir imagen (opcional)"}
+            <input
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                if (f) uploadImage(f);
+                e.target.value = "";
+              }}
+            />
+          </label>
+          {task.imageUrl && (
+            <button
+              onClick={() => onChange({ imageUrl: undefined })}
+              className="text-rose-400 hover:text-rose-300 text-xs font-bold"
+            >
+              Quitar imagen
+            </button>
+          )}
+        </div>
+        {task.imageUrl && (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={task.imageUrl}
+            alt="Imagen de la tarea"
+            className="mt-3 max-h-56 w-auto rounded-lg border border-white/10 bg-white"
+          />
+        )}
+      </div>
     </div>
   );
 }

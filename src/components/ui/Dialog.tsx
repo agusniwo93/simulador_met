@@ -16,6 +16,7 @@ interface DialogProps {
   tone?: "default" | "danger";
   loading?: boolean;
   icon?: string;
+  size?: "md" | "lg";
 }
 
 // Cuadro de diálogo reutilizable (reemplaza alert/confirm del navegador).
@@ -31,6 +32,7 @@ export default function Dialog({
   tone = "default",
   loading = false,
   icon,
+  size = "md",
 }: DialogProps) {
   // Cerrar con Escape
   useEffect(() => {
@@ -54,10 +56,10 @@ export default function Dialog({
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
-          className="fixed inset-0 z-[100] flex items-center justify-center p-5"
+          className="fixed inset-0 z-[100] flex items-start justify-center overflow-y-auto p-4 py-6 sm:items-center sm:p-5"
           onClick={() => !loading && onClose()}
         >
-          <div className="absolute inset-0 bg-[#020617]/80 backdrop-blur-md" />
+          <div className="fixed inset-0 bg-[#020617]/80 backdrop-blur-md" />
           <motion.div
             initial={{ opacity: 0, scale: 0.94, y: 16 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
@@ -66,7 +68,9 @@ export default function Dialog({
             onClick={(e) => e.stopPropagation()}
             role="dialog"
             aria-modal="true"
-            className="glass glow-ring relative w-full max-w-md rounded-3xl p-6 text-slate-100 sm:p-8"
+            className={`glass glow-ring relative my-auto w-full rounded-3xl p-6 text-slate-100 sm:p-8 ${
+              size === "lg" ? "max-w-lg" : "max-w-md"
+            }`}
           >
             {icon && (
               <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-cyan-500/25 to-indigo-500/25 text-2xl ring-1 ring-white/10">

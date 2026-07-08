@@ -1,7 +1,8 @@
 import fs from "fs";
 import path from "path";
 import { randomUUID } from "crypto";
-import type { Exam, ExamResult, Analytics, Section, SectionKind } from "./types";
+import type { Exam, ExamResult, Analytics, Section, SectionKind, ThemeSettings } from "./types";
+import { DEFAULT_THEME } from "./types";
 import { SEED_SECTIONS, SEED_TITLE, SEED_DURATION, SEED_ID, SEED_VERSION } from "./exam/seed-exam";
 
 // Base de datos en archivo (demo). Exámenes y resultados — sin cuentas.
@@ -12,6 +13,7 @@ export const UPLOAD_DIR = path.join(DATA_DIR, "uploads");
 interface DB {
   exams: Exam[];
   examResults: ExamResult[];
+  theme?: ThemeSettings;
 }
 
 const EMPTY_DB: DB = { exams: [], examResults: [] };
@@ -164,6 +166,19 @@ export function getExamResult(id: string): ExamResult | undefined {
   return read().examResults.find((r) => r.id === id);
 }
 
+// ---------- Tema de colores ----------
+
+export function getTheme(): ThemeSettings {
+  return { ...DEFAULT_THEME, ...(read().theme ?? {}) };
+}
+
+export function saveTheme(theme: Partial<ThemeSettings>): ThemeSettings {
+  return update((db) => {
+    db.theme = { ...DEFAULT_THEME, ...(db.theme ?? {}), ...theme };
+    return db.theme;
+  });
+}
+
 // ---------- Analítica ----------
 
 export function getAnalytics(): Analytics {
@@ -192,6 +207,7 @@ export function getAnalytics(): Analytics {
   const secAgg = new Map<SectionKind, { title: string; sum: number; count: number }>();
   for (const r of results) {
     for (const s of r.sectionResults) {
+      if (s.autoScored === false) continue; // Speaking no cuenta en promedios
       const cur = secAgg.get(s.kind) ?? { title: s.title, sum: 0, count: 0 };
       cur.sum += s.score;
       cur.count += 1;

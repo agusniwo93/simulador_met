@@ -2,7 +2,7 @@
 
 export type Lang = "en" | "es";
 
-export type SectionKind = "writing" | "listening" | "grammar" | "reading";
+export type SectionKind = "writing" | "listening" | "grammar" | "reading" | "speaking";
 
 // ---- Contenido del examen ----
 
@@ -11,6 +11,13 @@ export interface WritingTask {
   prompt: string;
   minWords: number;
   feedbackGuide?: string;
+}
+
+// Tarea de Speaking: el alumno graba su respuesta en voz (no auto-calificada).
+export interface SpeakingTask {
+  id: string;
+  prompt: string;
+  imageUrl?: string; // p. ej. "describe la imagen" (Task 1)
 }
 
 // Pregunta de opción múltiple (grammar / reading / listening)
@@ -37,6 +44,7 @@ export interface Section {
   writingTasks?: WritingTask[]; // kind === "writing"
   items?: McqItem[]; // kind === "grammar" | "listening"
   passages?: ReadingPassage[]; // kind === "reading"
+  speakingTasks?: SpeakingTask[]; // kind === "speaking"
 }
 
 export interface Exam {
@@ -84,12 +92,20 @@ export interface McqGrade {
   correct: boolean;
 }
 
+export interface SpeakingResponse {
+  taskId: string;
+  prompt: string;
+  audioUrl: string | null; // grabación subida por el alumno
+}
+
 export interface SectionResult {
   kind: SectionKind;
   title: string;
   score: number; // 0..100
+  autoScored?: boolean; // false en Speaking (revisión manual, no cuenta al total)
   writingGrades?: WritingGrade[];
   mcqGrades?: McqGrade[];
+  speakingResponses?: SpeakingResponse[];
   correctCount?: number; // para secciones MCQ
   totalCount?: number;
 }
@@ -104,6 +120,28 @@ export interface ExamResult {
   submittedAt: string;
   autoSubmitted: boolean;
 }
+
+// ---- Tema de colores (editable desde el admin) ----
+
+export interface ThemeSettings {
+  bg: string; // fondo de la página
+  brandFrom: string; // inicio del degradado de botones
+  brandTo: string; // fin del degradado de botones
+  gradFrom: string; // degradado de títulos (1)
+  gradVia: string; // degradado de títulos (2)
+  gradTo: string; // degradado de títulos (3)
+  accent: string; // color de acento (focus/resaltados)
+}
+
+export const DEFAULT_THEME: ThemeSettings = {
+  bg: "#020617",
+  brandFrom: "#06b6d4",
+  brandTo: "#6366f1",
+  gradFrom: "#67e8f9",
+  gradVia: "#818cf8",
+  gradTo: "#a78bfa",
+  accent: "#22d3ee",
+};
 
 // ---- Analítica (panel admin) ----
 

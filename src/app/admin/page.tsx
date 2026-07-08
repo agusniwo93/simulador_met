@@ -6,7 +6,8 @@ import { motion } from "framer-motion";
 import Background3D from "@/components/visual/Background3D";
 import { useT } from "@/lib/i18n/context";
 import { TEMPLATE_GUIDE } from "@/lib/exam/template-guide";
-import type { Exam, Analytics } from "@/lib/types";
+import type { Exam, Analytics, ThemeSettings } from "@/lib/types";
+import { DEFAULT_THEME } from "@/lib/types";
 
 type Banner = { kind: "success" | "error"; text: string } | null;
 
@@ -17,6 +18,7 @@ export default function AdminPage() {
   const [loading, setLoading] = useState(true);
   const [exams, setExams] = useState<Exam[]>([]);
   const [analytics, setAnalytics] = useState<Analytics | null>(null);
+  const [theme, setTheme] = useState<ThemeSettings | null>(null);
   const [title, setTitle] = useState("");
   const [file, setFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
@@ -24,9 +26,10 @@ export default function AdminPage() {
   const fileRef = useRef<HTMLInputElement>(null);
 
   const loadData = useCallback(async () => {
-    const [setsRes, anRes] = await Promise.all([
+    const [setsRes, anRes, thRes] = await Promise.all([
       fetch("/api/admin/sets"),
       fetch("/api/admin/analytics"),
+      fetch("/api/admin/settings"),
     ]);
     if (setsRes.status === 401) {
       router.replace("/admin/login");
@@ -34,6 +37,7 @@ export default function AdminPage() {
     }
     if (setsRes.ok) setExams((await setsRes.json()).exams);
     if (anRes.ok) setAnalytics((await anRes.json()).analytics);
+    if (thRes.ok) setTheme((await thRes.json()).theme);
   }, [router]);
 
   useEffect(() => {
@@ -123,6 +127,9 @@ export default function AdminPage() {
 
         {/* ====== ANALÍTICAS ====== */}
         <AnalyticsPanel analytics={analytics} t={t} />
+
+        {/* ====== TEMA DE COLORES ====== */}
+        <ThemePanel theme={theme} onSaved={setTheme} />
 
         {/* ====== UPLOAD ====== */}
         <motion.section
@@ -237,6 +244,137 @@ export default function AdminPage() {
         </section>
       </div>
     </main>
+  );
+}
+
+// ===================== TEMA DE COLORES =====================
+
+const THEME_VARS: Record<keyof ThemeSettings, string> = {
+  bg: "--bg",
+  brandFrom: "--brand-from",
+  brandTo: "--brand-to",
+  gradFrom: "--grad-from",
+  gradVia: "--grad-via",
+  gradTo: "--grad-to",
+  accent: "--accent",
+};
+
+const THEME_FIELDS: { key: keyof ThemeSettings; label: string }[] = [
+  { key: "bg", label: "Fondo de la página" },
+  { key: "brandFrom", label: "Botón · inicio" },
+  { key: "brandTo", label: "Botón · fin" },
+  { key: "accent", label: "Acento (focus)" },
+  { key: "gradFrom", label: "Título · color 1" },
+  { key: "gradVia", label: "Título · color 2" },
+  { key: "gradTo", label: "Título · color 3" },
+];
+
+function applyThemeLive(theme: ThemeSettings) {
+  const root = document.documentElement;
+  (Object.keys(THEME_VARS) as (keyof ThemeSettings)[]).forEach((k) => {
+    root.style.setProperty(THEME_VARS[k], theme[k]);
+  });
+}
+
+function ThemePanel({
+  theme,
+  onSaved,
+}: {
+  theme: ThemeSettings | null;
+  onSaved: (t: ThemeSettings) => void;
+}) {
+  const [draft, setDraft] = useState<ThemeSettings>(theme ?? DEFAULT_THEME);
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+
+  useEffect(() => {
+    if (theme) setDraft(theme);
+  }, [theme]);
+
+  const set = (key: keyof ThemeSettings, value: string) => {
+    const next = { ...draft, [key]: value };
+    setDraft(next);
+    setSaved(false);
+    applyThemeLive(next); // vista previa en vivo
+  };
+
+  const save = async () => {
+    setSaving(true);
+    try {
+      const res = await fetch("/api/admin/settings", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(draft),
+      });
+      if (res.ok) {
+        const data = (await res.json()) as { theme: ThemeSettings };
+        onSaved(data.theme);
+        applyThemeLive(data.theme);
+        setSaved(true);
+      }
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const reset = () => {
+    setDraft(DEFAULT_THEME);
+    applyThemeLive(DEFAULT_THEME);
+    setSaved(false);
+  };
+
+  return (
+    <motion.section
+      initial={{ opacity: 0, y: 18 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="glass rounded-3xl p-6 sm:p-8 mt-6"
+    >
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h2 className="text-xl font-black">Colores de la página</h2>
+          <p className="mt-1 text-sm text-slate-400">
+            Personaliza los colores del sitio. La vista previa se aplica al instante.
+          </p>
+        </div>
+        <button
+          onClick={reset}
+          className="glass rounded-xl px-4 py-2 text-sm font-bold text-slate-300 hover:bg-white/10"
+        >
+          Restaurar por defecto
+        </button>
+      </div>
+
+      <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        {THEME_FIELDS.map(({ key, label }) => (
+          <label
+            key={key}
+            className="flex items-center gap-3 rounded-2xl border border-white/10 bg-white/[0.03] p-3"
+          >
+            <input
+              type="color"
+              value={draft[key]}
+              onChange={(e) => set(key, e.target.value)}
+              className="h-10 w-12 shrink-0 cursor-pointer rounded-lg border border-white/10 bg-transparent"
+            />
+            <span className="min-w-0">
+              <span className="block text-sm font-semibold text-slate-200">{label}</span>
+              <span className="block text-xs font-mono uppercase text-slate-500">{draft[key]}</span>
+            </span>
+          </label>
+        ))}
+      </div>
+
+      <div className="mt-5 flex flex-wrap items-center gap-3">
+        <button
+          onClick={save}
+          disabled={saving}
+          className="btn-primary px-6 py-3 rounded-xl font-black uppercase tracking-tight text-sm disabled:opacity-50"
+        >
+          {saving ? "Guardando…" : "Guardar colores"}
+        </button>
+        {saved && <span className="text-sm font-semibold text-emerald-300">✓ Colores guardados</span>}
+      </div>
+    </motion.section>
   );
 }
 

@@ -9,6 +9,8 @@ import Dialog from "@/components/ui/Dialog";
 import { useI18n } from "@/lib/i18n/context";
 import type { Exam, Section, McqItem } from "@/lib/types";
 
+type TFn = (path: string, params?: Record<string, string | number>) => string;
+
 // ----- Claves de almacenamiento -----
 const LS_EXAM = "met_exam";
 const LS_ANSWERS = "met_exam_answers";
@@ -212,6 +214,10 @@ export default function ExamRunPage() {
     setAnswers((prev) => ({ ...prev, [itemId]: optionIndex }));
   }, []);
 
+  const setSpeaking = useCallback((taskId: string, url: string) => {
+    setAnswers((prev) => ({ ...prev, [taskId]: url }));
+  }, []);
+
   // ---------- Web Speech API (listening) ----------
   const speak = useCallback(
     (itemId: string, transcript: string) => {
@@ -340,6 +346,11 @@ export default function ExamRunPage() {
         const items = (section.passages ?? []).flatMap((p) => p.items);
         const answered = items.filter((it) => answers[it.id] != null).length;
         return { answered, total: items.length };
+      }
+      if (section.kind === "speaking") {
+        const tasks = section.speakingTasks ?? [];
+        const answered = tasks.filter((tk) => typeof answers[tk.id] === "string" && answers[tk.id]).length;
+        return { answered, total: tasks.length };
       }
       const items = section.items ?? [];
       const answered = items.filter((it) => answers[it.id] != null).length;
@@ -724,6 +735,42 @@ export default function ExamRunPage() {
                 </div>
               )}
 
+              {/* ----- SPEAKING ----- */}
+              {current.kind === "speaking" && (
+                <div className="mt-6 space-y-6">
+                  <div className="rounded-2xl border border-indigo-400/20 bg-indigo-400/5 p-4 text-sm text-slate-300">
+                    🎙️ {t("exam.speakingHint")}
+                  </div>
+                  {(current.speakingTasks ?? []).map((task, n) => (
+                    <div key={task.id} className="glass glow-ring rounded-3xl p-5 sm:p-7">
+                      <h3 className="text-sm font-bold uppercase tracking-wide text-slate-300">
+                        {t("exam.task")} {n + 1}
+                      </h3>
+                      <div className="mt-3 rounded-2xl border border-cyan-400/20 bg-cyan-400/5 p-4 sm:p-5">
+                        <p className="whitespace-pre-line text-sm leading-relaxed text-slate-200">
+                          {task.prompt}
+                        </p>
+                      </div>
+                      {task.imageUrl && (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={task.imageUrl}
+                          alt={task.prompt}
+                          className="mt-4 w-full rounded-2xl border border-white/10 bg-white"
+                        />
+                      )}
+                      <SpeakingRecorder
+                        existingUrl={
+                          typeof answers[task.id] === "string" ? (answers[task.id] as string) : null
+                        }
+                        onUploaded={(url) => setSpeaking(task.id, url)}
+                        t={t}
+                      />
+                    </div>
+                  ))}
+                </div>
+              )}
+
               {/* ----- Navegación prev/next ----- */}
               <div className="mt-8 flex items-center justify-between gap-3">
                 <button
@@ -870,6 +917,169 @@ function McqCard({
           );
         })}
       </div>
+    </div>
+  );
+}
+
+// ---- Grabador de voz para Speaking (MediaRecorder + subida al servidor) ----
+type RecState = "idle" | "recording" | "uploading" | "error";
+
+function SpeakingRecorder({
+  existingUrl,
+  onUploaded,
+  t,
+}: {
+  existingUrl: string | null;
+  onUploaded: (url: string) => void;
+  t: TFn;
+}) {
+  const [state, setState] = useState<RecState>("idle");
+  const [elapsed, setElapsed] = useState(0);
+  const [supported, setSupported] = useState(true);
+
+  const recorderRef = useRef<MediaRecorder | null>(null);
+  const chunksRef = useRef<Blob[]>([]);
+  const streamRef = useRef<MediaStream | null>(null);
+  const timerRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    setSupported(
+      typeof window !== "undefined" &&
+        !!navigator.mediaDevices &&
+        typeof window.MediaRecorder !== "undefined"
+    );
+  }, []);
+
+  const stopStream = useCallback(() => {
+    streamRef.current?.getTracks().forEach((tr) => tr.stop());
+    streamRef.current = null;
+    if (timerRef.current) {
+      window.clearInterval(timerRef.current);
+      timerRef.current = null;
+    }
+  }, []);
+
+  // Limpieza al desmontar (p. ej. al cambiar de sección).
+  useEffect(() => {
+    return () => {
+      try {
+        if (recorderRef.current?.state === "recording") recorderRef.current.stop();
+      } catch {
+        /* ignore */
+      }
+      stopStream();
+    };
+  }, [stopStream]);
+
+  const upload = useCallback(
+    async (blob: Blob) => {
+      setState("uploading");
+      try {
+        const fd = new FormData();
+        fd.append("file", blob, "recording");
+        const res = await fetch("/api/exam/audio", { method: "POST", body: fd });
+        if (!res.ok) throw new Error("upload failed");
+        const data = (await res.json()) as { url: string };
+        onUploaded(data.url);
+        setState("idle");
+      } catch {
+        setState("error");
+      }
+    },
+    [onUploaded]
+  );
+
+  const start = useCallback(async () => {
+    if (!supported) return;
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      streamRef.current = stream;
+      const mr = new MediaRecorder(stream);
+      chunksRef.current = [];
+      mr.ondataavailable = (e) => {
+        if (e.data.size > 0) chunksRef.current.push(e.data);
+      };
+      mr.onstop = () => {
+        const blob = new Blob(chunksRef.current, { type: mr.mimeType || "audio/webm" });
+        stopStream();
+        void upload(blob);
+      };
+      mr.start();
+      recorderRef.current = mr;
+      setElapsed(0);
+      setState("recording");
+      timerRef.current = window.setInterval(() => setElapsed((e) => e + 1), 1000);
+    } catch {
+      // Permiso denegado o sin micrófono.
+      setState("error");
+      stopStream();
+    }
+  }, [supported, stopStream, upload]);
+
+  const stop = useCallback(() => {
+    try {
+      recorderRef.current?.stop();
+    } catch {
+      /* ignore */
+    }
+    if (timerRef.current) {
+      window.clearInterval(timerRef.current);
+      timerRef.current = null;
+    }
+  }, []);
+
+  const fmt = (s: number) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+
+  if (!supported) {
+    return (
+      <p className="mt-4 rounded-xl bg-amber-500/10 px-4 py-3 text-sm font-medium text-amber-300">
+        {t("exam.micUnsupported")}
+      </p>
+    );
+  }
+
+  return (
+    <div className="mt-4 flex flex-col gap-3">
+      <div className="flex flex-wrap items-center gap-3">
+        {state === "recording" ? (
+          <button
+            onClick={stop}
+            className="inline-flex items-center gap-2 rounded-full bg-gradient-to-r from-rose-500 to-red-600 px-5 py-2.5 text-sm font-bold text-white shadow-[0_8px_24px_-10px_rgba(244,63,94,0.7)] transition hover:brightness-110 active:scale-95"
+          >
+            <span className="h-2.5 w-2.5 rounded-sm bg-white" aria-hidden />
+            {t("exam.stop")} · {fmt(elapsed)}
+          </button>
+        ) : state === "uploading" ? (
+          <span className="inline-flex items-center gap-2 rounded-full glass px-5 py-2.5 text-sm font-bold text-slate-300">
+            <span className="h-4 w-4 rounded-full border-2 border-cyan-400/30 border-t-cyan-400 animate-spin" />
+            {t("exam.savingAudio")}
+          </span>
+        ) : (
+          <button
+            onClick={start}
+            className="inline-flex items-center gap-2 rounded-full bg-gradient-to-r from-cyan-500 to-indigo-600 px-5 py-2.5 text-sm font-bold text-white shadow-[0_8px_24px_-10px_rgba(99,102,241,0.7)] transition hover:brightness-110 active:scale-95"
+          >
+            <span className="h-2.5 w-2.5 rounded-full bg-white animate-pulse" aria-hidden />
+            {existingUrl ? t("exam.rerecord") : t("exam.record")}
+          </button>
+        )}
+
+        {existingUrl && state !== "recording" && (
+          <span className="inline-flex items-center gap-1.5 text-xs font-bold uppercase tracking-wide text-emerald-300">
+            <span aria-hidden>✓</span> {t("exam.recorded")}
+          </span>
+        )}
+      </div>
+
+      {state === "error" && (
+        <p className="rounded-xl bg-rose-500/10 px-4 py-3 text-sm font-medium text-rose-300">
+          {t("exam.micDenied")}
+        </p>
+      )}
+
+      {existingUrl && state !== "recording" && (
+        <audio controls src={existingUrl} className="w-full max-w-md" />
+      )}
     </div>
   );
 }

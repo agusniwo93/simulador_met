@@ -167,20 +167,33 @@ export default function LandingClient({ hasAccess, autoPay = false, payFailed = 
         </p>
       </footer>
 
-      <Dialog open={payOpen} onClose={() => !paying && setPayOpen(false)} icon="🎓" title={t("pay.title")} description={t("pay.subtitle")}>
+      <Dialog
+        open={payOpen}
+        onClose={() => !paying && setPayOpen(false)}
+        icon="🎓"
+        title={t("pay.title")}
+        description={t("pay.subtitle")}
+        size={formToken ? "lg" : "md"}
+      >
         {!formToken ? (
           <>
-            <div className="rounded-2xl bg-white/[0.03] border border-white/10 p-5">
-              <div className="flex items-baseline justify-between">
+            <div className="rounded-2xl border border-white/10 bg-gradient-to-br from-white/[0.06] to-white/[0.02] p-5 sm:p-6">
+              <div className="flex items-baseline justify-between gap-3">
                 <span className="text-xs font-bold uppercase tracking-wider text-slate-500">
                   {t("pay.oneTime")}
                 </span>
-                <span className="text-3xl font-black text-gradient">{t("pay.price")}</span>
+                <span className="text-3xl font-black text-gradient sm:text-4xl">{t("pay.price")}</span>
               </div>
-              <ul className="mt-4 space-y-2">
+              <ul className="mt-4 space-y-2.5">
                 {[t("pay.f1"), t("pay.f2"), t("pay.f3")].map((f) => (
-                  <li key={f} className="flex items-start gap-2 text-sm text-slate-300">
-                    <span className="mt-0.5 text-cyan-400 font-black">✓</span>
+                  <li key={f} className="flex items-start gap-2.5 text-sm text-slate-300">
+                    <span
+                      className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[11px] font-black text-white"
+                      style={{ background: "linear-gradient(135deg, var(--brand-from), var(--brand-to))" }}
+                      aria-hidden
+                    >
+                      ✓
+                    </span>
                     {f}
                   </li>
                 ))}
@@ -188,7 +201,7 @@ export default function LandingClient({ hasAccess, autoPay = false, payFailed = 
             </div>
 
             {payError && (
-              <p className="mt-4 text-rose-400 text-sm font-semibold bg-rose-500/10 rounded-xl px-4 py-3">
+              <p className="mt-4 rounded-xl bg-rose-500/10 px-4 py-3 text-sm font-semibold text-rose-400">
                 {t("pay.failed")}
               </p>
             )}
@@ -196,15 +209,49 @@ export default function LandingClient({ hasAccess, autoPay = false, payFailed = 
             <button
               onClick={startPayment}
               disabled={paying}
-              className="btn-primary mt-5 w-full py-4 rounded-2xl font-black uppercase tracking-tight flex items-center justify-center gap-2 disabled:opacity-50"
+              className="btn-primary mt-5 flex w-full items-center justify-center gap-2 rounded-2xl py-4 font-black uppercase tracking-tight disabled:opacity-50"
             >
-              {paying ? "Conectando con IziPay..." : "PAGAR CON IZIPAY"}
+              {paying ? (
+                <>
+                  <span className="h-4 w-4 rounded-full border-2 border-white/40 border-t-white animate-spin" />
+                  {t("pay.processing")}
+                </>
+              ) : (
+                t("pay.payButton")
+              )}
             </button>
-            <p className="mt-3 text-center text-xs text-slate-500">Pago 100% seguro.</p>
+            <button
+              onClick={() => !paying && setPayOpen(false)}
+              disabled={paying}
+              className="mt-3 w-full rounded-2xl px-5 py-3 text-sm font-bold text-slate-400 transition hover:bg-white/5 hover:text-slate-200 disabled:opacity-50"
+            >
+              {t("common.cancel")}
+            </button>
+            <p className="mt-3 flex items-center justify-center gap-1.5 text-center text-xs text-slate-500">
+              <span aria-hidden>🔒</span> {t("pay.demoNote")}
+            </p>
           </>
         ) : (
-          <div className="mt-4 flex flex-col items-center justify-center bg-white rounded-xl p-4 min-h-[300px]">
-             <div className="kr-embedded" {...{ "kr-form-token": formToken }}></div>
+          <div className="flex flex-col gap-4">
+            <div className="flex items-baseline justify-between gap-3">
+              <span className="text-sm font-bold text-slate-200">{t("pay.cardDetails")}</span>
+              <span className="text-lg font-black text-gradient">{t("pay.price")}</span>
+            </div>
+            <div className="rounded-2xl bg-white p-3 shadow-inner sm:p-4">
+              <div className="kr-embedded" {...{ "kr-form-token": formToken }}></div>
+            </div>
+            <button
+              onClick={() => {
+                setFormToken(null);
+                setPublicKey(null);
+              }}
+              className="w-full rounded-2xl px-5 py-3 text-sm font-bold text-slate-400 transition hover:bg-white/5 hover:text-slate-200"
+            >
+              ← {t("pay.back")}
+            </button>
+            <p className="flex items-center justify-center gap-1.5 text-center text-xs text-slate-500">
+              <span aria-hidden>🔒</span> {t("pay.demoNote")}
+            </p>
           </div>
         )}
       </Dialog>

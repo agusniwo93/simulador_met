@@ -12,6 +12,7 @@ import type {
   WritingGrade,
   McqGrade,
   GrammarIssue,
+  SpeakingResponse,
 } from "@/lib/types";
 
 // ---- Helpers de color según el puntaje (mismas franjas en toda la página) ----
@@ -286,6 +287,27 @@ function McqGradeCard({ grade, index, t }: { grade: McqGrade; index: number; t: 
 
 // ---- Tarjeta de detalle por sección ----
 
+function SpeakingResponseCard({ resp, index, t }: { resp: SpeakingResponse; index: number; t: Translate }) {
+  return (
+    <div className="glass rounded-2xl p-5 sm:p-6">
+      <p className="text-sm font-medium leading-relaxed text-slate-100">
+        <span className="mr-1.5 text-slate-500">{index + 1}.</span>
+        {resp.prompt}
+      </p>
+      <div className="mt-4">
+        <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-slate-500">
+          {t("results.yourRecording")}
+        </p>
+        {resp.audioUrl ? (
+          <audio controls src={resp.audioUrl} className="w-full max-w-md" />
+        ) : (
+          <p className="text-sm font-medium text-amber-300">{t("results.noRecording")}</p>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function SectionDetail({
   section,
   index,
@@ -296,6 +318,7 @@ function SectionDetail({
   t: Translate;
 }) {
   const isWriting = section.kind === "writing";
+  const isSpeaking = section.kind === "speaking";
   return (
     <motion.section
       variants={fadeUp}
@@ -307,22 +330,32 @@ function SectionDetail({
     >
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h3 className="text-lg font-semibold text-slate-100">{section.title}</h3>
-        <span
-          className={`rounded-full border px-3 py-1 text-sm font-semibold ${bandFor(section.score).chipBg} ${
-            bandFor(section.score).chipText
-          }`}
-        >
-          {Math.round(section.score)} / 100
-        </span>
+        {isSpeaking ? (
+          <span className="rounded-full border border-indigo-400/30 bg-indigo-400/15 px-3 py-1 text-sm font-semibold text-indigo-200">
+            {t("results.manualReview")}
+          </span>
+        ) : (
+          <span
+            className={`rounded-full border px-3 py-1 text-sm font-semibold ${bandFor(section.score).chipBg} ${
+              bandFor(section.score).chipText
+            }`}
+          >
+            {Math.round(section.score)} / 100
+          </span>
+        )}
       </div>
 
-      {isWriting
-        ? (section.writingGrades ?? []).map((g) => (
-            <WritingGradeCard key={g.taskId} grade={g} t={t} />
+      {isSpeaking
+        ? (section.speakingResponses ?? []).map((r, i) => (
+            <SpeakingResponseCard key={r.taskId} resp={r} index={i} t={t} />
           ))
-        : (section.mcqGrades ?? []).map((g, i) => (
-            <McqGradeCard key={g.itemId} grade={g} index={i} t={t} />
-          ))}
+        : isWriting
+          ? (section.writingGrades ?? []).map((g) => (
+              <WritingGradeCard key={g.taskId} grade={g} t={t} />
+            ))
+          : (section.mcqGrades ?? []).map((g, i) => (
+              <McqGradeCard key={g.itemId} grade={g} index={i} t={t} />
+            ))}
     </motion.section>
   );
 }
@@ -441,7 +474,8 @@ export default function ResultPage() {
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             {result.sectionResults.map((s, i) => {
               const band = bandFor(s.score);
-              const isMcq = s.kind !== "writing";
+              const isSpeaking = s.kind === "speaking";
+              const isMcq = s.kind !== "writing" && !isSpeaking;
               return (
                 <motion.div
                   key={`${s.kind}-${i}`}
@@ -463,9 +497,15 @@ export default function ResultPage() {
                       </p>
                     )}
                   </div>
-                  <span className={`shrink-0 text-2xl font-bold tabular-nums ${band.text}`}>
-                    {Math.round(s.score)}
-                  </span>
+                  {isSpeaking ? (
+                    <span className="shrink-0 text-xs font-bold uppercase tracking-wide text-indigo-300">
+                      {t("results.manualReview")}
+                    </span>
+                  ) : (
+                    <span className={`shrink-0 text-2xl font-bold tabular-nums ${band.text}`}>
+                      {Math.round(s.score)}
+                    </span>
+                  )}
                 </motion.div>
               );
             })}

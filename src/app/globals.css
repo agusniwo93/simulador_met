@@ -7,10 +7,19 @@
 
 :root {
   color-scheme: dark;
+
+  /* Colores de marca (editables desde el admin; se sobreescriben en el layout) */
+  --bg: #020617;
+  --brand-from: #06b6d4;
+  --brand-to: #6366f1;
+  --grad-from: #67e8f9;
+  --grad-via: #818cf8;
+  --grad-to: #a78bfa;
+  --accent: #22d3ee;
 }
 
 body {
-  background: #020617;
+  background: var(--bg);
   color: #e2e8f0;
   font-family: var(--font-geist-sans), system-ui, sans-serif;
 }
@@ -26,7 +35,7 @@ body {
 
 /* Texto con degradado de marca */
 .text-gradient {
-  background: linear-gradient(135deg, #67e8f9 0%, #818cf8 60%, #a78bfa 100%);
+  background: linear-gradient(135deg, var(--grad-from) 0%, var(--grad-via) 60%, var(--grad-to) 100%);
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
@@ -34,10 +43,10 @@ body {
 
 /* Botón primario de marca */
 .btn-primary {
-  background: linear-gradient(135deg, #06b6d4, #6366f1);
+  background: linear-gradient(135deg, var(--brand-from), var(--brand-to));
   color: white;
   transition: all 0.2s ease;
-  box-shadow: 0 10px 30px -10px rgba(99, 102, 241, 0.6);
+  box-shadow: 0 10px 30px -10px color-mix(in srgb, var(--brand-to) 60%, transparent);
 }
 .btn-primary:hover {
   filter: brightness(1.1);
@@ -54,7 +63,8 @@ body {
 
 /* Borde con resplandor sutil */
 .glow-ring {
-  box-shadow: 0 0 0 1px rgba(103, 232, 249, 0.15), 0 20px 60px -20px rgba(99, 102, 241, 0.45);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 18%, transparent),
+    0 20px 60px -20px color-mix(in srgb, var(--brand-to) 45%, transparent);
 }
 
 /* Animación de entrada flotante */
@@ -97,6 +107,6 @@ body {
 }
 .input-dark:focus {
   outline: none;
-  border-color: #22d3ee;
+  border-color: var(--accent);
   background: rgba(255, 255, 255, 0.08);
 }
