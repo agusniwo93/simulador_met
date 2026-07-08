@@ -1,34 +1,29 @@
 import { NextResponse } from "next/server";
-import { captureOrder } from "@/lib/pay/izipay";
 import { ACCESS_COOKIE, signAccessPass, accessCookieOptions } from "@/lib/auth/access";
 
 function baseUrl(req: Request): string {
   return process.env.NEXT_PUBLIC_BASE_URL || new URL(req.url).origin;
 }
 
-// PayPal redirige aquí tras la aprobación (?token=ORDER_ID). Captura la orden y,
-// solo si queda COMPLETED, emite el pase de acceso. No hay modo demo.
-export async function GET(req: Request) {
+// Redirección inmediata al examen tras la confirmación de pago de IziPay
+export async function POST(req: Request) {
   const base = baseUrl(req);
-  const orderId = new URL(req.url).searchParams.get("token");
 
-  if (!orderId) {
-    return NextResponse.redirect(`${base}/?pay=failed`);
-  }
-
-  let paid = false;
   try {
-    paid = await captureOrder(orderId);
-  } catch {
-    paid = false;
-  }
+    // 1. Generar el pase de acceso para el alumno
+    const pass = await signAccessPass();
 
-  if (!paid) {
-    return NextResponse.redirect(`${base}/?pay=failed`);
-  }
+    // 2. Redirigir de inmediato a la pantalla del examen
+    // Se utiliza status 303 para asegurar el cambio limpio de POST a GET en el navegador
+    const res = NextResponse.redirect(`${base}/exam`, { status: 303 });
+    
+    // 3. Inyectar la cookie de acceso de forma segura
+    res.cookies.set(ACCESS_COOKIE, pass, accessCookieOptions);
 
-  const pass = await signAccessPass();
-  const res = NextResponse.redirect(`${base}/exam`);
-  res.cookies.set(ACCESS_COOKIE, pass, accessCookieOptions);
-  return res;
+    return res;
+    
+  } catch (error) {
+    console.error("Error al procesar el éxito de IziPay:", error);
+    return NextResponse.redirect(`${base}/?pay=failed`, { status: 303 });
+  }
 }
