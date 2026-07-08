@@ -1,41 +1,40 @@
 import { NextResponse } from "next/server";
+import { cookies } from "next/headers";
 import { ACCESS_COOKIE, signAccessPass, accessCookieOptions } from "@/lib/auth/access";
 
-export async function POST(req: Request) {
-  // 1. OBTENER EL DOMINIO PÚBLICO REAL DETRÁS DEL PROXY DE RENDER
-  // Extraemos la URL real de procedencia para evitar el redireccionamiento erróneo a localhost:10000
+async function handleAccessRedirect(req: Request) {
   const forwardedHost = req.headers.get("x-forwarded-host");
   const forwardedProto = req.headers.get("x-forwarded-proto") || "https";
   const referer = req.headers.get("referer");
 
   let origin = "";
   if (referer) {
-    origin = new URL(referer).origin; // Ej: https://met-plataforma.onrender.com
+    origin = new URL(referer).origin;
   } else if (forwardedHost) {
     origin = `${forwardedProto}://${forwardedHost}`;
   } else {
-    origin = new URL(req.url).origin; // Respaldo local
-  }
-
-  // Salvavidas para el ACCESS_SECRET en producción
-  if (!process.env.ACCESS_SECRET) {
-    process.env.ACCESS_SECRET = "clave_secreta_de_emergencia_para_la_exposicion_2026";
+    origin = new URL(req.url).origin;
   }
 
   try {
-    // 2. Generar el pase de acceso para el examen
     const pass = await signAccessPass();
-
-    // 3. Redirigir de inmediato usando el origen público real detectado
     const res = NextResponse.redirect(`${origin}/exam`, { status: 303 });
     
-    // 4. Inyectar la cookie de acceso de forma segura en el navegador
+    // Aquí Next.js te deja escribir la cookie de forma 100% nativa y segura
     res.cookies.set(ACCESS_COOKIE, pass, accessCookieOptions);
-
     return res;
-    
   } catch (error) {
-    console.error("Error al procesar el éxito de IziPay:", error);
+    console.error("Error al procesar acceso:", error);
     return NextResponse.redirect(`${origin}/?pay=failed`, { status: 303 });
   }
+}
+
+// Soporte para el redireccionamiento desde la Landing Page (?pay=1)
+export async function GET(req: Request) {
+  return handleAccessRedirect(req);
+}
+
+// Soporte para la notificación original post-pago por detrás de IziPay
+export async function POST(req: Request) {
+  return handleAccessRedirect(req);
 }
