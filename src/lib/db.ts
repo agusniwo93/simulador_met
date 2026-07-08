@@ -2,7 +2,7 @@ import fs from "fs";
 import path from "path";
 import { randomUUID } from "crypto";
 import type { Exam, ExamResult, Analytics, Section, SectionKind } from "./types";
-import { SEED_SECTIONS, SEED_TITLE, SEED_DURATION } from "./exam/seed-exam";
+import { SEED_SECTIONS, SEED_TITLE, SEED_DURATION, SEED_ID, SEED_VERSION } from "./exam/seed-exam";
 
 // Base de datos en archivo (demo). Exámenes y resultados — sin cuentas.
 const DATA_DIR = path.join(process.cwd(), "data");
@@ -23,11 +23,7 @@ function ensureDirs() {
 
 function read(): DB {
   ensureDirs();
-  if (!fs.existsSync(DB_FILE)) {
-    write(EMPTY_DB);
-    seed();
-    return read();
-  }
+  if (!fs.existsSync(DB_FILE)) return { ...EMPTY_DB };
   try {
     const raw = fs.readFileSync(DB_FILE, "utf-8");
     return { ...EMPTY_DB, ...(JSON.parse(raw) as DB) };
@@ -135,6 +131,25 @@ export function deleteExam(id: string): boolean {
   });
 }
 
+export function updateExam(
+  id: string,
+  patch: { title?: string; durationMinutes?: number; sections?: Section[] }
+): Exam | undefined {
+  return update((db) => {
+    const idx = db.exams.findIndex((e) => e.id === id);
+    if (idx === -1) return undefined;
+    const current = db.exams[idx];
+    const updated: Exam = {
+      ...current,
+      title: patch.title ?? current.title,
+      durationMinutes: patch.durationMinutes ?? current.durationMinutes,
+      sections: patch.sections ? expandListeningDistractors(patch.sections) : current.sections,
+    };
+    db.exams[idx] = updated;
+    return updated;
+  });
+}
+
 // ---------- Resultados ----------
 
 export function createExamResult(input: Omit<ExamResult, "id">): ExamResult {
@@ -206,18 +221,27 @@ export function getAnalytics(): Analytics {
 
 // ---------- Seed ----------
 
+// Siembra / migra el examen de demostración con un id estable, sin duplicarlo
+// ni tocar los exámenes subidos ni los resultados del usuario.
 function seed() {
-  const db = read();
-  if (db.exams.length === 0) {
-    db.exams.push({
-      id: randomUUID(),
-      title: SEED_TITLE,
-      durationMinutes: SEED_DURATION,
-      sections: expandListeningDistractors(SEED_SECTIONS),
-      createdAt: new Date().toISOString(),
-    });
-    write(db);
-  }
+  update((db) => {
+    // Elimina el seed antiguo (auto-sembrado sin versión) y versiones previas.
+    db.exams = db.exams.filter(
+      (e) =>
+        !((e.id === SEED_ID || e.title === SEED_TITLE) &&
+          (e.seedVersion == null || e.seedVersion < SEED_VERSION))
+    );
+    if (!db.exams.some((e) => e.id === SEED_ID)) {
+      db.exams.unshift({
+        id: SEED_ID,
+        title: SEED_TITLE,
+        durationMinutes: SEED_DURATION,
+        sections: expandListeningDistractors(SEED_SECTIONS),
+        createdAt: new Date().toISOString(),
+        seedVersion: SEED_VERSION,
+      });
+    }
+  });
 }
 
-read();
+seed();

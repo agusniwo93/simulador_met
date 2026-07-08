@@ -216,12 +216,20 @@ export default function AdminPage() {
                       ))}
                     </div>
                   </div>
-                  <button
-                    onClick={() => remove(e.id)}
-                    className="shrink-0 text-rose-400 hover:text-rose-300 font-bold text-sm"
-                  >
-                    {t("admin.delete")}
-                  </button>
+                  <div className="flex shrink-0 items-center gap-3">
+                    <button
+                      onClick={() => router.push(`/admin/exam/${e.id}`)}
+                      className="text-cyan-300 hover:text-cyan-200 font-bold text-sm"
+                    >
+                      {t("admin.edit")}
+                    </button>
+                    <button
+                      onClick={() => remove(e.id)}
+                      className="text-rose-400 hover:text-rose-300 font-bold text-sm"
+                    >
+                      {t("admin.delete")}
+                    </button>
+                  </div>
                 </li>
               ))}
             </ul>

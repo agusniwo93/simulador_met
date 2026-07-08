@@ -2,6 +2,8 @@ import type { Section } from "../types";
 
 export const SEED_TITLE = "Simulador MET 4";
 export const SEED_DURATION = 90; // minutos
+export const SEED_ID = "seed-met-4"; // id estable para poder re-sembrar sin duplicar
+export const SEED_VERSION = 2; // súbelo cuando cambie el contenido del seed
 
 export const SEED_SECTIONS: Section[] = [
   // ---------------------------------------------------------------------------
@@ -681,6 +683,317 @@ export const SEED_SECTIONS: Section[] = [
             id: "r2q5",
             stem: "In the fourth sentence of paragraph 2, which word could replace fatal?",
             options: ["deadly", "accidental", "frequent", "surprising"],
+            correctIndex: 0,
+          },
+        ],
+      },
+
+      // ----- PACK 1 (pasajes en imagen) -----
+      {
+        id: "rp1a",
+        title: "Pack 1 · Passage 1",
+        imageUrl: "/seed/pack1-1.png",
+        items: [
+          {
+            id: "rp1a-q1",
+            stem: "What is the main purpose of this section?",
+            options: [
+              "to explain who can join an event",
+              "to advertise a public meeting",
+              "to introduce a politician",
+              "to encourage people to vote",
+            ],
+            correctIndex: 3,
+          },
+          {
+            id: "rp1a-q2",
+            stem: "In the last question in the advertisement, which word could best replace “make it”?",
+            options: ["create", "decide", "prepare", "visit"],
+            correctIndex: 3,
+          },
+        ],
+      },
+      {
+        id: "rp1b",
+        title: "Pack 1 · Passage 2",
+        imageUrl: "/seed/pack1-2.png",
+        items: [
+          {
+            id: "rp1b-q1",
+            stem: "What has recently changed in Langford?",
+            options: [
+              "the quality of education has improved",
+              "more police officers were hired",
+              "public services have become inefficient",
+              "the city decided to increase taxes",
+            ],
+            correctIndex: 0,
+          },
+          {
+            id: "rp1b-q2",
+            stem: "What does Doris Clarke think is important for anyone running the city?",
+            options: [
+              "find ways to add money to the city’s budget",
+              "gain the support of police and teachers",
+              "be realistic in your goals",
+              "cut taxes to save money",
+            ],
+            correctIndex: 2,
+          },
+          {
+            id: "rp1b-q3",
+            stem: "What is the main topic of this section?",
+            options: [
+              "the results of an election",
+              "the responsibilities of a mayor",
+              "a major problem in a city",
+              "a description of a candidate",
+            ],
+            correctIndex: 3,
+          },
+          {
+            id: "rp1b-q4",
+            stem: "What does Doris Clarke say will be her first priority if elected again?",
+            options: [
+              "providing water service to more regions",
+              "eliminating unneeded social programs",
+              "installing new pipes in some areas",
+              "lowering the cost of healthcare for all",
+            ],
+            correctIndex: 2,
+          },
+          {
+            id: "rp1b-q5",
+            stem: "In the last sentence, which phrase could replace “a proven track record”?",
+            options: [
+              "a history of success",
+              "an organized plan",
+              "an educational background",
+              "a strong belief",
+            ],
+            correctIndex: 0,
+          },
+        ],
+      },
+      {
+        id: "rp1c",
+        title: "Pack 1 · Passage 3",
+        imageUrl: "/seed/pack1-3.png",
+        items: [
+          {
+            id: "rp1c-q1",
+            stem: "What best describes the main idea of the article?",
+            options: [
+              "Tactics for becoming elected have ancient roots.",
+              "Focusing on one’s strengths is key to winning elections.",
+              "Marcus Cicero influenced other Roman politicians.",
+              "Roman politicians were crueler to each other than today’s politicians.",
+            ],
+            correctIndex: 0,
+          },
+          {
+            id: "rp1c-q2",
+            stem: "In the first sentence of paragraph 2, what does “them” refer to?",
+            options: [
+              "politicians in ancient Rome",
+              "modern political campaigns",
+              "differences of the era",
+              "the ideas in an essay",
+            ],
+            correctIndex: 3,
+          },
+          {
+            id: "rp1c-q3",
+            stem: "What did Quintus Cicero believe was natural for an elected leader?",
+            options: [
+              "to overestimate what they can achieve",
+              "to want to fulfill the desires of the public",
+              "to feel displeased when losing popularity",
+              "to not fulfill their campaign commitments",
+            ],
+            correctIndex: 3,
+          },
+          {
+            id: "rp1c-q4",
+            stem: "What does the author think about the Cicero brothers?",
+            options: [
+              "Quintus Cicero wrote the political essay.",
+              "Quintus Cicero wrote more memorable essays than his brother.",
+              "Marcus Cicero was a notable political figure.",
+              "Marcus Cicero was a better leader than his brother.",
+            ],
+            correctIndex: 2,
+          },
+          {
+            id: "rp1c-q5",
+            stem: "Which strategy mentioned in section C does Doris Clarke seem to support?",
+            options: [
+              "compromising personal beliefs to win votes",
+              "spreading negative news",
+              "doing research on political opponents",
+              "making too many promises",
+            ],
+            correctIndex: 2,
+          },
+        ],
+      },
+
+      // ----- PACK 2 (pasajes en imagen) -----
+      {
+        id: "rp2a",
+        title: "Pack 2 · Passage 1",
+        imageUrl: "/seed/pack2-1.jpeg",
+        items: [
+          {
+            id: "rp2a-q1",
+            stem: "What is the main purpose of this passage?",
+            options: [
+              "to explain how robots are used in modern classrooms",
+              "to advertise lessons in robotics and simple engineering",
+              "to describe the parts needed to build a robot",
+              "to compare coding lessons with design lessons",
+            ],
+            correctIndex: 1,
+          },
+          {
+            id: "rp2a-q2",
+            stem: "In the first paragraph, what does the phrase “hands-on lessons” suggest?",
+            options: [
+              "students will mainly watch instructors build robots",
+              "students will practice using the skills they are taught",
+              "students will study robotics without working in groups",
+              "students will only learn from written instructions",
+            ],
+            correctIndex: 1,
+          },
+          {
+            id: "rp2a-q3",
+            stem: "What is said about people with different experience levels?",
+            options: [
+              "Only advanced builders can attend the lab sessions.",
+              "Beginners must already know how to code before joining.",
+              "Lessons are offered for both new and experienced students.",
+              "Students are placed in classes based only on their age.",
+            ],
+            correctIndex: 2,
+          },
+        ],
+      },
+      {
+        id: "rp2b",
+        title: "Pack 2 · Passage 2",
+        imageUrl: "/seed/pack2-2.jpeg",
+        items: [
+          {
+            id: "rp2b-q1",
+            stem: "What is the main topic of this passage?",
+            options: [
+              "why robotics programs are becoming more common",
+              "how students prepare for robotics competitions",
+              "why schools are replacing science classes with clubs",
+              "how machines respond to commands in classrooms",
+            ],
+            correctIndex: 0,
+          },
+          {
+            id: "rp2b-q2",
+            stem: "According to paragraph 1, what do supporters say robotics is not only about?",
+            options: ["working in teams", "building devices", "solving problems", "learning commands"],
+            correctIndex: 1,
+          },
+          {
+            id: "rp2b-q3",
+            stem: "Why does the author mention patience, creativity, and confidence?",
+            options: [
+              "to show that robotics develops personal skills as well as technical skills",
+              "to explain why robotics is easier than other school activities",
+              "to suggest that students should focus less on science and technology",
+              "to prove that robotics clubs are mainly for artistic students",
+            ],
+            correctIndex: 0,
+          },
+          {
+            id: "rp2b-q4",
+            stem: "In paragraph 3, what does the word “them” refer to?",
+            options: [
+              "competitions",
+              "robotics clubs",
+              "the skills students learn",
+              "educators around the world",
+            ],
+            correctIndex: 2,
+          },
+          {
+            id: "rp2b-q5",
+            stem: "What does the author predict in the final paragraph?",
+            options: [
+              "Robotics programs will probably continue to grow in schools.",
+              "Robotics clubs will become useful only for future careers.",
+              "Educators will stop using robotics to teach critical thinking.",
+              "Competitions will become the only reason students join robotics.",
+            ],
+            correctIndex: 0,
+          },
+        ],
+      },
+      {
+        id: "rp2c",
+        title: "Pack 2 · Passage 3",
+        imageUrl: "/seed/pack2-3.jpeg",
+        items: [
+          {
+            id: "rp2c-q1",
+            stem: "What is the passage mainly about?",
+            options: [
+              "how robotics practice helps students build problem-solving skills and confidence",
+              "why students often prefer robotics to other school subjects",
+              "how teachers choose difficult robotics projects for advanced students",
+              "why mistakes should be avoided when building machines",
+            ],
+            correctIndex: 0,
+          },
+          {
+            id: "rp2c-q2",
+            stem: "In paragraph 1, what does “this” refer to in the sentence “At first, this can feel difficult”?",
+            options: [
+              "making repeated changes while solving problems",
+              "building robots only with a teacher’s help",
+              "studying science without using technology",
+              "finishing a project without testing ideas",
+            ],
+            correctIndex: 0,
+          },
+          {
+            id: "rp2c-q3",
+            stem: "Why does the author mention a student who once struggled to complete a simple design?",
+            options: [
+              "to show that students can improve through gradual practice",
+              "to explain why simple designs are usually unsuccessful",
+              "to argue that robotics should begin with difficult projects",
+              "to show that confidence is more important than fixing errors",
+            ],
+            correctIndex: 0,
+          },
+          {
+            id: "rp2c-q4",
+            stem: "According to paragraph 3, how can robotics skills be useful outside robotics class?",
+            options: [
+              "They help students avoid working with other people.",
+              "They help students solve problems carefully in different situations.",
+              "They allow students to succeed without preparation or feedback.",
+              "They make students focus only on future engineering jobs.",
+            ],
+            correctIndex: 1,
+          },
+          {
+            id: "rp2c-q5",
+            stem: "What opinion does the author express in the conclusion?",
+            options: [
+              "Robotics becomes valuable because it helps students manage mistakes and build confidence.",
+              "Robotics is useful only when students can build machines without errors.",
+              "Robotics should be treated as an exciting subject but not as a practical skill.",
+              "Robotics practice removes the need for preparation and feedback.",
+            ],
             correctIndex: 0,
           },
         ],

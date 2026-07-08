@@ -690,9 +690,19 @@ export default function ExamRunPage() {
                         {passage.title && (
                           <h3 className="mt-1 text-lg font-bold text-slate-100">{passage.title}</h3>
                         )}
-                        <div className="mt-3 max-h-80 overflow-y-auto whitespace-pre-line rounded-2xl border border-white/10 bg-slate-950/50 p-4 text-sm leading-relaxed text-slate-200">
-                          {passage.text}
-                        </div>
+                        {passage.imageUrl && (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img
+                            src={passage.imageUrl}
+                            alt={passage.title ?? t("exam.readPassage")}
+                            className="mt-3 w-full rounded-2xl border border-white/10 bg-white"
+                          />
+                        )}
+                        {passage.text && (
+                          <div className="mt-3 max-h-80 overflow-y-auto whitespace-pre-line rounded-2xl border border-white/10 bg-slate-950/50 p-4 text-sm leading-relaxed text-slate-200">
+                            {passage.text}
+                          </div>
+                        )}
                       </div>
                       <div className="space-y-5">
                         {passage.items.map((item, n) => (

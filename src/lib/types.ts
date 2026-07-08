@@ -25,7 +25,8 @@ export interface McqItem {
 export interface ReadingPassage {
   id: string;
   title?: string;
-  text: string;
+  text?: string; // pasaje en texto (opcional si es imagen)
+  imageUrl?: string; // pasaje como imagen (p. ej. anuncios/artículos escaneados)
   items: McqItem[];
 }
 
@@ -45,6 +46,7 @@ export interface Exam {
   durationMinutes: number;
   sourceFile?: string;
   sections: Section[];
+  seedVersion?: number; // marca de versión para el examen sembrado
 }
 
 // ---- Corrección ----
