@@ -138,7 +138,7 @@ export default function ExamEditorPage() {
   return (
     <main className="relative min-h-screen text-slate-100 px-5 pt-20 pb-32 sm:px-6 sm:pt-24">
       <Background3D variant="deep" className="fixed inset-0 -z-10" />
-      <div className="fixed inset-0 -z-10 bg-[#020617]/70" />
+      <div className="fixed inset-0 -z-10 bg-veil" />
 
       <div className="max-w-4xl mx-auto">
         {/* Cabecera */}

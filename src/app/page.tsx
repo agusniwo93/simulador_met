@@ -1,7 +1,7 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import LandingClient from "@/components/landing/LandingClient";
-import { ACCESS_COOKIE, hasValidAccess, signAccessPass, accessCookieOptions } from "@/lib/auth/access";
+import { ACCESS_COOKIE, hasValidAccess } from "@/lib/auth/access";
 
 export default async function Home({
   searchParams,
@@ -11,31 +11,12 @@ export default async function Home({
   const store = await cookies();
   const sp = await searchParams;
 
-  // 🔥 INTERCEPTOR SEGURO PARA LA EXPOSICIÓN
+  // Otorgar acceso tras el pago. La cookie NO puede fijarse desde un Server
+  // Component (Next.js lo prohíbe: "Cookies can only be modified in a Server
+  // Action or Route Handler"), así que delegamos en el Route Handler que sí
+  // puede hacerlo y luego redirige al examen.
   if (sp.pay === "1") {
-    // Si Render no tiene configurada la variable, inyectamos el fallback 
-    // directamente en el hilo de ejecución antes de llamar a tu función.
-    if (!process.env.ACCESS_SECRET) {
-      Object.defineProperty(process.env, "ACCESS_SECRET", {
-        value: "clave_secreta_de_emergencia_para_la_exposicion_2026",
-        writable: true,
-        enumerable: true,
-        configurable: true
-      });
-    }
-    
-    // Llamamos a tu función original exactamente como fue diseñada (con 0 parámetros)
-    const pass = await signAccessPass();
-    
-    // Guardamos la cookie de forma nativa respetando los tipos de Next.js
-    store.set({
-      name: ACCESS_COOKIE,
-      value: pass,
-      ...accessCookieOptions
-    });
-    
-    // ¡Redirección forzada al simulador!
-    redirect("/exam");
+    redirect("/api/pay/grant");
   }
 
   // Flujo normal de carga de la Landing

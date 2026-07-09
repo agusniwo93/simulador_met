@@ -12,7 +12,7 @@ export default function ExamIntroPage() {
   return (
     <main className="relative min-h-screen flex items-center justify-center px-5 py-20 text-slate-100 sm:px-6 sm:py-24">
       <Background3D variant="deep" className="fixed inset-0 -z-10" />
-      <div className="fixed inset-0 -z-10 bg-[#020617]/50" />
+      <div className="fixed inset-0 -z-10 bg-veil" />
 
       <motion.div
         initial={{ opacity: 0, y: 24 }}

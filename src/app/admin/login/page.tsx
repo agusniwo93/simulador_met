@@ -39,7 +39,7 @@ export default function AdminLoginPage() {
   return (
     <main className="relative min-h-screen flex items-center justify-center px-6 py-24">
       <Background3D variant="deep" className="fixed inset-0 -z-10" />
-      <div className="fixed inset-0 -z-10 bg-[#020617]/50" />
+      <div className="fixed inset-0 -z-10 bg-veil" />
       <motion.form
         onSubmit={submit}
         initial={{ opacity: 0, y: 24 }}

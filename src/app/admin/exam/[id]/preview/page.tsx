@@ -86,7 +86,7 @@ export default function ExamPreviewPage() {
   return (
     <main className="relative min-h-screen pb-16 text-slate-100">
       <Background3D variant="deep" className="fixed inset-0 -z-10" />
-      <div className="fixed inset-0 -z-10 bg-[#020617]/70" />
+      <div className="fixed inset-0 -z-10 bg-veil" />
 
       {/* Barra superior */}
       <header className="glass sticky top-0 z-20 border-b border-white/10">

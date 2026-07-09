@@ -33,6 +33,13 @@ body {
   backdrop-filter: blur(16px);
 }
 
+/* Velo de fondo: atenúa la escena 3D para legibilidad pero respeta el color
+   de fondo elegido en el admin (--bg), para que el tema acople en todas las
+   páginas, no solo en la landing. */
+.bg-veil {
+  background-color: color-mix(in srgb, var(--bg) 62%, transparent);
+}
+
 /* Texto con degradado de marca */
 .text-gradient {
   background: linear-gradient(135deg, var(--grad-from) 0%, var(--grad-via) 60%, var(--grad-to) 100%);
