@@ -222,6 +222,10 @@ body {
 :root[data-theme="light"] .bg-white\/20 { background-color: rgba(15, 23, 42, 0.1); }
 :root[data-theme="light"] .bg-white\/80 { background-color: rgba(15, 23, 42, 0.06); }
 
+/* Paneles oscuros embebidos (lecturas, respuestas) → superficie clara */
+:root[data-theme="light"] .bg-slate-950\/50 { background-color: rgba(15, 23, 42, 0.04); }
+:root[data-theme="light"] .bg-slate-950 { background-color: rgba(15, 23, 42, 0.05); }
+
 /* Bordes */
 :root[data-theme="light"] .border-white\/5 { border-color: rgba(15, 23, 42, 0.08); }
 :root[data-theme="light"] .border-white\/10 { border-color: rgba(15, 23, 42, 0.1); }
