@@ -68,13 +68,18 @@ export default function LandingClient({ hasAccess, autoPay = false, payFailed = 
     // nuevo token, en vez de re-inyectar scripts (que deja la caja en blanco).
     const w = window as unknown as {
       KR?: {
+        removeForms: () => Promise<unknown>;
         setFormToken: (t: string) => Promise<unknown>;
         renderElements: (selector?: string) => Promise<unknown>;
       };
     };
 
     if (w.KR) {
-      w.KR.setFormToken(formToken)
+      // Krypton exige limpiar el formulario anterior antes de renderizar otro,
+      // si no lanza "No se puede llamar a KR.renderElements si un formulario ya
+      // está renderizado". Por eso: removeForms → setFormToken → renderElements.
+      w.KR.removeForms()
+        .then(() => w.KR!.setFormToken(formToken))
         .then(() => w.KR!.renderElements(".kr-embedded"))
         .catch((e) => console.error("IziPay re-render:", e));
       return;
