@@ -44,7 +44,7 @@ export default function LandingClient({ hasAccess, autoPay = false, payFailed = 
     try {
       const res = await fetch("/api/pay/create", { method: "POST" });
       const data = await res.json();
-      
+
       if (res.ok && data.formToken && data.publicKey) {
         setFormToken(data.formToken);
         setPublicKey(data.publicKey);
@@ -57,6 +57,17 @@ export default function LandingClient({ hasAccess, autoPay = false, payFailed = 
       setPayError(true);
       setPaying(false);
     }
+  };
+
+  // Cierra el modal reseteando TODO el estado del pago. Es clave: si se cierra
+  // (p. ej. clic fuera) dejando el formToken, al reabrir se muestra la caja de
+  // tarjeta con el div vacío y el efecto no se re-ejecuta (mismo token) → vacío.
+  const closePay = () => {
+    if (paying) return;
+    setPayOpen(false);
+    setFormToken(null);
+    setPublicKey(null);
+    setPayError(false);
   };
 
   useEffect(() => {
@@ -212,7 +223,7 @@ export default function LandingClient({ hasAccess, autoPay = false, payFailed = 
 
       <Dialog
         open={payOpen}
-        onClose={() => !paying && setPayOpen(false)}
+        onClose={closePay}
         icon="🎓"
         title={t("pay.title")}
         description={t("pay.subtitle")}
@@ -264,7 +275,7 @@ export default function LandingClient({ hasAccess, autoPay = false, payFailed = 
               )}
             </button>
             <button
-              onClick={() => !paying && setPayOpen(false)}
+              onClick={closePay}
               disabled={paying}
               className="mt-3 w-full rounded-2xl px-5 py-3 text-sm font-bold text-slate-400 transition hover:bg-white/5 hover:text-slate-200 disabled:opacity-50"
             >
