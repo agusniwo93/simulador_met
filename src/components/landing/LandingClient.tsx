@@ -67,56 +67,57 @@ export default function LandingClient({ hasAccess, autoPay = false, payFailed = 
       KR?: {
         removeForms: () => Promise<unknown>;
         setFormToken: (t: string) => Promise<unknown>;
-        renderElements: (selector?: string) => Promise<unknown>;
       };
     };
 
-    // Render 100% manual: el div NO lleva el atributo kr-form-token, así IziPay
-    // no auto-renderiza y no choca con nuestro render (que causaba el error
-    // "un formulario ya está renderizado"). Un solo camino: limpiar (por si hay
-    // uno previo al volver atrás) → fijar token → renderizar.
+    // Un contenedor con la clase `.kr-embedded` es auto-renderizado por Krypton
+    // en cuanto se fija el token con setFormToken(). Por eso NO llamamos a
+    // renderElements() (eso sería un segundo render → error CLIENT_725
+    // "un formulario ya está renderizado"). Camino único: limpiar el formulario
+    // previo (por si se volvió atrás) → fijar el nuevo token (auto-renderiza).
     const render = () => {
       const KR = w.KR;
       if (!KR || cancelled) return;
       Promise.resolve(KR.removeForms())
         .catch(() => {})
         .then(() => KR.setFormToken(formToken))
-        .then(() => KR.renderElements(".kr-embedded"))
         .catch((e) => console.error("IziPay render:", e));
     };
 
     if (w.KR) {
       render();
-      return;
+    } else {
+      // Cargar la librería de Krypton una sola vez.
+      const link = document.createElement("link");
+      link.rel = "stylesheet";
+      link.href = "https://static.micuentaweb.pe/static/js/krypton-client/V4.0/ext/classic-reset.css";
+      document.head.appendChild(link);
+
+      const script = document.createElement("script");
+      script.src = "https://static.micuentaweb.pe/static/js/krypton-client/V4.0/stable/kr-payment-form.min.js";
+      script.setAttribute("kr-public-key", publicKey);
+      script.setAttribute("kr-post-url-success", "/api/pay/confirm");
+      script.onload = () => {
+        // KR puede tardar un instante en estar listo tras cargar el script.
+        const waitForKR = () => {
+          if (cancelled) return;
+          if (w.KR) render();
+          else setTimeout(waitForKR, 60);
+        };
+        waitForKR();
+      };
+      document.head.appendChild(script);
+
+      const themeScript = document.createElement("script");
+      themeScript.src = "https://static.micuentaweb.pe/static/js/krypton-client/V4.0/ext/classic.js";
+      document.head.appendChild(themeScript);
     }
 
-    // Cargar la librería de Krypton una sola vez.
-    const link = document.createElement("link");
-    link.rel = "stylesheet";
-    link.href = "https://static.micuentaweb.pe/static/js/krypton-client/V4.0/ext/classic-reset.css";
-    document.head.appendChild(link);
-
-    const script = document.createElement("script");
-    script.src = "https://static.micuentaweb.pe/static/js/krypton-client/V4.0/stable/kr-payment-form.min.js";
-    script.setAttribute("kr-public-key", publicKey);
-    script.setAttribute("kr-post-url-success", "/api/pay/confirm");
-    script.onload = () => {
-      // KR puede tardar un instante en estar listo tras cargar el script.
-      const waitForKR = () => {
-        if (cancelled) return;
-        if (w.KR) render();
-        else setTimeout(waitForKR, 60);
-      };
-      waitForKR();
-    };
-    document.head.appendChild(script);
-
-    const themeScript = document.createElement("script");
-    themeScript.src = "https://static.micuentaweb.pe/static/js/krypton-client/V4.0/ext/classic.js";
-    document.head.appendChild(themeScript);
-
+    // Al cerrar/volver atrás o cambiar de token, limpiamos el formulario de KR
+    // para no dejar estado colgando (que dispararía el "ya está renderizado").
     return () => {
       cancelled = true;
+      w.KR?.removeForms().catch(() => {});
     };
   }, [formToken, publicKey]);
 
