@@ -1,0 +1,3 @@
+# Los scripts de shell deben usar finales de línea LF aunque se editen en Windows,
+# o fallan al ejecutarse en Linux (VPS) con errores tipo "\r: command not found".
+*.sh text eol=lf
