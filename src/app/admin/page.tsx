@@ -268,11 +268,27 @@ const THEME_FIELDS: { key: keyof ThemeSettings; label: string }[] = [
   { key: "gradTo", label: "Título · color 3" },
 ];
 
+function isLightBg(hex: string): boolean {
+  const h = hex.replace("#", "");
+  const full = h.length === 3 ? h.split("").map((c) => c + c).join("") : h;
+  if (full.length !== 6) return false;
+  const toLin = (v: number) => {
+    const c = v / 255;
+    return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+  };
+  const r = toLin(parseInt(full.slice(0, 2), 16));
+  const g = toLin(parseInt(full.slice(2, 4), 16));
+  const b = toLin(parseInt(full.slice(4, 6), 16));
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b > 0.5;
+}
+
 function applyThemeLive(theme: ThemeSettings) {
   const root = document.documentElement;
   (Object.keys(THEME_VARS) as (keyof ThemeSettings)[]).forEach((k) => {
     root.style.setProperty(THEME_VARS[k], theme[k]);
   });
+  // Voltea el tema claro/oscuro en vivo según la luminancia del fondo.
+  root.dataset.theme = isLightBg(theme.bg) ? "light" : "dark";
 }
 
 function ThemePanel({
