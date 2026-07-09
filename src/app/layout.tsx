@@ -11,9 +11,19 @@ const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
 const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "ExamBridge MET — Writing Simulator",
+  metadataBase: new URL("https://metsimulatorenglishlearning.com"),
+  title: "ExamBridge MET — Simulador del Michigan English Test",
   description:
-    "Simulador de Writing del Michigan English Test (MET) con corrección automática y retroalimentación personalizada.",
+    "Practica el examen completo del MET — Writing, Listening, Grammar, Reading y Speaking — con corrección automática y retroalimentación en tiempo real.",
+  openGraph: {
+    title: "ExamBridge MET — Simulador del Michigan English Test",
+    description:
+      "Practica el examen completo del MET — Writing, Listening, Grammar, Reading y Speaking — con corrección automática y retroalimentación en tiempo real.",
+    url: "https://metsimulatorenglishlearning.com",
+    siteName: "ExamBridge MET",
+    locale: "es_PE",
+    type: "website",
+  },
 };
 
 // Luminancia relativa (sRGB) del color de fondo para decidir tema claro/oscuro.
