@@ -119,24 +119,68 @@ body {
 }
 
 /* ---------- Formulario embebido de IziPay (Krypton) ---------- */
-/* Los campos de tarjeta viven en iframes (PCI) y no se pueden estilizar desde
-   aquí, pero el contenedor y el botón de pago sí son del DOM padre. */
+/* El interior sensible de los campos vive en iframes (PCI), pero el contorno de
+   cada campo (borde, fondo, radio, foco) y el botón sí son estilizables. */
 .kr-embedded {
   width: 100%;
 }
+
+/* Campos: contorno redondeado, fondo suave y separación consistente. */
+.kr-embedded .kr-pan,
+.kr-embedded .kr-expiry,
+.kr-embedded .kr-security-code,
+.kr-embedded .kr-installment-number,
+.kr-embedded .kr-first-installment-delay,
+.kr-embedded .kr-card-holder-name {
+  border: 1px solid #e5e7eb !important;
+  border-radius: 0.85rem !important;
+  background: #f8fafc !important;
+  box-shadow: none !important;
+  margin-bottom: 0.7rem !important;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease !important;
+}
+
+/* Foco: resalta con el color de marca. */
+.kr-embedded .kr-pan.kr-focus,
+.kr-embedded .kr-expiry.kr-focus,
+.kr-embedded .kr-security-code.kr-focus,
+.kr-embedded .kr-installment-number.kr-focus,
+.kr-embedded .kr-first-installment-delay.kr-focus,
+.kr-embedded .kr-card-holder-name.kr-focus {
+  border-color: var(--brand-from) !important;
+  background: #ffffff !important;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--brand-from) 18%, transparent) !important;
+}
+
+/* Campo con error. */
+.kr-embedded .kr-field.kr-error,
+.kr-embedded .kr-pan.kr-error,
+.kr-embedded .kr-expiry.kr-error,
+.kr-embedded .kr-security-code.kr-error {
+  border-color: #ef4444 !important;
+  box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.15) !important;
+}
+
+/* Botón de pago: degradado de marca, ancho completo. */
 .kr-embedded .kr-payment-button,
 .kr-payment-button {
+  width: 100% !important;
   background: linear-gradient(135deg, var(--brand-from), var(--brand-to)) !important;
+  color: #fff !important;
   border: none !important;
-  border-radius: 0.9rem !important;
+  border-radius: 0.95rem !important;
+  padding: 0.85rem 1rem !important;
+  margin-top: 0.3rem !important;
   font-weight: 800 !important;
-  letter-spacing: 0.01em !important;
-  box-shadow: 0 10px 30px -12px color-mix(in srgb, var(--brand-to) 60%, transparent) !important;
-  transition: filter 0.2s ease !important;
+  letter-spacing: 0.02em !important;
+  text-transform: uppercase !important;
+  box-shadow: 0 12px 30px -12px color-mix(in srgb, var(--brand-to) 65%, transparent) !important;
+  transition: filter 0.2s ease, transform 0.2s ease !important;
 }
 .kr-embedded .kr-payment-button:hover,
 .kr-payment-button:hover {
   filter: brightness(1.08) !important;
+  transform: translateY(-1px) !important;
 }
 .kr-embedded .kr-form-error {
   border-radius: 0.6rem !important;

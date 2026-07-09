@@ -233,14 +233,16 @@ export default function LandingClient({ hasAccess, autoPay = false, payFailed = 
           </>
         ) : (
           <div className="flex flex-col gap-4">
-            <div className="flex items-center justify-between gap-3 rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3">
+            <div className="flex items-center justify-between gap-3 rounded-2xl border border-white/10 bg-gradient-to-br from-white/[0.07] to-white/[0.02] px-4 py-3.5">
               <span className="flex items-center gap-2 text-sm font-bold text-slate-200">
                 <span aria-hidden>💳</span> {t("pay.cardDetails")}
               </span>
-              <span className="text-lg font-black text-gradient">{t("pay.price")}</span>
+              <span className="text-xl font-black text-gradient">{t("pay.price")}</span>
             </div>
-            <div className="rounded-2xl bg-white p-4 shadow-[inset_0_1px_0_rgba(0,0,0,0.05)] ring-1 ring-black/5 sm:p-5">
-              <div className="kr-embedded" {...{ "kr-form-token": formToken }}></div>
+            <div className="rounded-3xl bg-gradient-to-br from-cyan-500/50 to-indigo-500/50 p-px shadow-2xl">
+              <div className="rounded-[1.4rem] bg-white p-4 sm:p-5">
+                <div className="kr-embedded" {...{ "kr-form-token": formToken }}></div>
+              </div>
             </div>
             <div className="flex items-center justify-between gap-3">
               <button
