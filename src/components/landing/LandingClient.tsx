@@ -61,11 +61,8 @@ export default function LandingClient({ hasAccess, autoPay = false, payFailed = 
 
   useEffect(() => {
     if (!formToken || !publicKey) return;
+    let cancelled = false;
 
-    // Krypton es un singleton: hay que cargar sus scripts UNA sola vez. Si ya
-    // están cargados (p. ej. al volver atrás y pagar de nuevo), reutilizamos la
-    // API oficial KR.setFormToken() para re-renderizar el formulario con el
-    // nuevo token, en vez de re-inyectar scripts (que deja la caja en blanco).
     const w = window as unknown as {
       KR?: {
         removeForms: () => Promise<unknown>;
@@ -74,35 +71,53 @@ export default function LandingClient({ hasAccess, autoPay = false, payFailed = 
       };
     };
 
+    // Render 100% manual: el div NO lleva el atributo kr-form-token, así IziPay
+    // no auto-renderiza y no choca con nuestro render (que causaba el error
+    // "un formulario ya está renderizado"). Un solo camino: limpiar (por si hay
+    // uno previo al volver atrás) → fijar token → renderizar.
+    const render = () => {
+      const KR = w.KR;
+      if (!KR || cancelled) return;
+      Promise.resolve(KR.removeForms())
+        .catch(() => {})
+        .then(() => KR.setFormToken(formToken))
+        .then(() => KR.renderElements(".kr-embedded"))
+        .catch((e) => console.error("IziPay render:", e));
+    };
+
     if (w.KR) {
-      // Krypton exige limpiar el formulario anterior antes de renderizar otro,
-      // si no lanza "No se puede llamar a KR.renderElements si un formulario ya
-      // está renderizado". Por eso: removeForms → setFormToken → renderElements.
-      w.KR.removeForms()
-        .then(() => w.KR!.setFormToken(formToken))
-        .then(() => w.KR!.renderElements(".kr-embedded"))
-        .catch((e) => console.error("IziPay re-render:", e));
+      render();
       return;
     }
 
-    // Primera carga: CSS + librería (auto-renderiza usando el kr-form-token del div).
+    // Cargar la librería de Krypton una sola vez.
     const link = document.createElement("link");
     link.rel = "stylesheet";
     link.href = "https://static.micuentaweb.pe/static/js/krypton-client/V4.0/ext/classic-reset.css";
-    link.setAttribute("data-kr", "");
     document.head.appendChild(link);
 
     const script = document.createElement("script");
     script.src = "https://static.micuentaweb.pe/static/js/krypton-client/V4.0/stable/kr-payment-form.min.js";
     script.setAttribute("kr-public-key", publicKey);
     script.setAttribute("kr-post-url-success", "/api/pay/confirm");
-    script.setAttribute("data-kr", "");
+    script.onload = () => {
+      // KR puede tardar un instante en estar listo tras cargar el script.
+      const waitForKR = () => {
+        if (cancelled) return;
+        if (w.KR) render();
+        else setTimeout(waitForKR, 60);
+      };
+      waitForKR();
+    };
     document.head.appendChild(script);
 
     const themeScript = document.createElement("script");
     themeScript.src = "https://static.micuentaweb.pe/static/js/krypton-client/V4.0/ext/classic.js";
-    themeScript.setAttribute("data-kr", "");
     document.head.appendChild(themeScript);
+
+    return () => {
+      cancelled = true;
+    };
   }, [formToken, publicKey]);
 
   const features = [
@@ -268,7 +283,7 @@ export default function LandingClient({ hasAccess, autoPay = false, payFailed = 
             </div>
             <div className="rounded-3xl bg-gradient-to-br from-cyan-500/50 to-indigo-500/50 p-px shadow-2xl">
               <div className="rounded-[1.4rem] bg-white p-4 sm:p-5">
-                <div key={formToken} className="kr-embedded" {...{ "kr-form-token": formToken }}></div>
+                <div className="kr-embedded"></div>
               </div>
             </div>
             <div className="flex items-center justify-between gap-3">
