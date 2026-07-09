@@ -2,11 +2,9 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useT } from "@/lib/i18n/context";
 import LanguageToggle from "@/components/ui/LanguageToggle";
 
 export default function Navbar() {
-  const t = useT();
   const pathname = usePathname();
 
   // El examen a pantalla completa tiene su propia cabecera.
@@ -22,21 +20,9 @@ export default function Navbar() {
         </Link>
 
         <div className="flex shrink-0 items-center gap-0.5 sm:gap-1 text-sm font-semibold">
-          <Link
-            href="/exam"
-            className="px-2 py-2 sm:px-3 rounded-lg text-white/70 hover:text-white hover:bg-white/5 transition-colors"
-          >
-            {t("nav.exam")}
-          </Link>
-          <Link
-            href="/admin"
-            className="px-2 py-2 sm:px-3 rounded-lg text-white/70 hover:text-white hover:bg-white/5 transition-colors"
-          >
-            {t("nav.admin")}
-          </Link>
-          <div className="ml-1 sm:ml-2">
-            <LanguageToggle light />
-          </div>
+          {/* El acceso al examen es solo tras pagar (desde la landing); el panel
+              admin se entra por /admin directamente. Sin enlaces públicos aquí. */}
+          <LanguageToggle light />
         </div>
       </nav>
     </header>
