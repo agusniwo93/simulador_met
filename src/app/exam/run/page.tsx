@@ -427,8 +427,8 @@ export default function ExamRunPage() {
             {t("exam.sectionTitle")}
           </p>
           <h1 className="mt-2 text-2xl font-bold">
-            <span className="text-gradient">ExamBridge</span>{" "}
-            <span className="text-slate-300 not-italic text-base font-medium align-middle">MET</span>
+            <span className="text-gradient">Learning</span>
+            <span className="text-slate-300 not-italic text-base font-medium align-middle">English</span>
           </h1>
           <p className="mt-4 text-sm leading-relaxed text-slate-400">{t("exam.enterName")}</p>
 

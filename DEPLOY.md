@@ -1,6 +1,6 @@
 # Despliegue en Hostinger VPS (Ubuntu)
 
-Guía para publicar **ExamBridge MET** en un VPS de Hostinger con el dominio
+Guía para publicar **Learning English** en un VPS de Hostinger con el dominio
 `metsimulatorenglishlearning.com`.
 
 > Esta app guarda datos en disco (base de datos `data/db.json`, imágenes y

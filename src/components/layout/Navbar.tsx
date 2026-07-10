@@ -15,7 +15,7 @@ export default function Navbar() {
       <nav className="max-w-7xl mx-auto px-4 sm:px-5 h-16 flex items-center justify-between gap-2 text-white">
         <Link href="/" className="flex min-w-0 items-center gap-2">
           <span className="font-black italic text-lg sm:text-xl tracking-tighter truncate">
-            ExamBridge <span className="font-light not-italic text-cyan-400">MET</span>
+            Learning<span className="font-light not-italic text-cyan-400">English</span>
           </span>
         </Link>
 

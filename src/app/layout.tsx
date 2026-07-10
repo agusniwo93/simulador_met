@@ -12,15 +12,15 @@ const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"]
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://metsimulatorenglishlearning.com"),
-  title: "ExamBridge MET — Simulador del Michigan English Test",
+  title: "Learning English — Simulador del Michigan English Test",
   description:
     "Practica el examen completo del MET — Writing, Listening, Grammar, Reading y Speaking — con corrección automática y retroalimentación en tiempo real.",
   openGraph: {
-    title: "ExamBridge MET — Simulador del Michigan English Test",
+    title: "Learning English — Simulador del Michigan English Test",
     description:
       "Practica el examen completo del MET — Writing, Listening, Grammar, Reading y Speaking — con corrección automática y retroalimentación en tiempo real.",
     url: "https://metsimulatorenglishlearning.com",
-    siteName: "ExamBridge MET",
+    siteName: "Learning English",
     locale: "es_PE",
     type: "website",
   },

@@ -1,4 +1,4 @@
-# ExamBridge MET — Simulador
+# Learning English — Simulador
 
 Simulador del **Michigan English Test (MET)** con examen multi-sección: **Writing, Listening, Grammar y Reading**, con temporizador, corrección automática y resultados por sección. Incluye panel de administración con analíticas, idiomas **Español / Inglés** y diseño con fondo 3D animado.
 
