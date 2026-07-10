@@ -32,7 +32,7 @@ function interpolate(text: string, params?: Params): string {
 
 export function I18nProvider({
   children,
-  initialLang = "es",
+  initialLang = "en",
 }: {
   children: React.ReactNode;
   initialLang?: Lang;

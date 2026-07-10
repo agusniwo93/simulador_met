@@ -44,7 +44,9 @@ function isLightBg(hex: string): boolean {
 
 export default async function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   const store = await cookies();
-  const initialLang: Lang = store.get("met_lang")?.value === "en" ? "en" : "es";
+  // Inglés por defecto en toda la página; solo se usa español si el usuario lo
+  // eligió antes (cookie met_lang = "es").
+  const initialLang: Lang = store.get("met_lang")?.value === "es" ? "es" : "en";
   const theme = getTheme();
   const mode = isLightBg(theme.bg) ? "light" : "dark";
 
