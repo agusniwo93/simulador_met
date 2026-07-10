@@ -48,7 +48,7 @@ const en = {
     feature2Desc: "Grammar, spelling and style checked automatically with actionable tips.",
     feature3Title: "Improvement tips",
     feature3Desc: "When you slip on grammar or length, you get specific advice to get better.",
-    footer: "Jandir Jurado • Marina de Guerra del Perú • 2026",
+    footer: "Jandir Jurado • Peruvian Navy • 2026",
   },
   exam: {
     introTitle: "Writing Section Instructions",
