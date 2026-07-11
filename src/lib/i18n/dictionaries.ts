@@ -48,7 +48,7 @@ const en = {
     feature2Desc: "Grammar, spelling and style checked automatically with actionable tips.",
     feature3Title: "Improvement tips",
     feature3Desc: "When you slip on grammar or length, you get specific advice to get better.",
-    footer: "Developed by Jandir Jurado · 2026",
+    footer: "Developed · 2026",
   },
   exam: {
     introTitle: "Writing Section Instructions",
@@ -233,7 +233,7 @@ const es: Dict = {
     feature2Desc: "Gramática, ortografía y estilo revisados automáticamente con consejos accionables.",
     feature3Title: "Consejos de mejora",
     feature3Desc: "Cuando fallas en gramática o extensión, recibes consejos específicos para mejorar.",
-    footer: "Desarrollado por Jandir Jurado · 2026",
+    footer: "Desarrollado · 2026",
   },
   exam: {
     introTitle: "Instrucciones de la sección Writing",
