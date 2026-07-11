@@ -3,7 +3,7 @@ import type { Section } from "../types";
 export const SEED_TITLE = "Simulador MET 4";
 export const SEED_DURATION = 90; // minutos
 export const SEED_ID = "seed-met-4"; // id estable para poder re-sembrar sin duplicar
-export const SEED_VERSION = 3; // súbelo cuando cambie el contenido del seed
+export const SEED_VERSION = 4; // súbelo cuando cambie el contenido del seed
 
 export const SEED_SECTIONS: Section[] = [
   // ---------------------------------------------------------------------------
@@ -691,7 +691,7 @@ export const SEED_SECTIONS: Section[] = [
       // ----- PACK 1 (pasajes en imagen) -----
       {
         id: "rp1a",
-        title: "Pack 1 · Passage 1",
+        title: "Passage 1",
         imageUrl: "/seed/pack1-1.png",
         items: [
           {
@@ -715,7 +715,7 @@ export const SEED_SECTIONS: Section[] = [
       },
       {
         id: "rp1b",
-        title: "Pack 1 · Passage 2",
+        title: "Passage 2",
         imageUrl: "/seed/pack1-2.png",
         items: [
           {
@@ -777,7 +777,7 @@ export const SEED_SECTIONS: Section[] = [
       },
       {
         id: "rp1c",
-        title: "Pack 1 · Passage 3",
+        title: "Passage 3",
         imageUrl: "/seed/pack1-3.png",
         items: [
           {
@@ -841,7 +841,7 @@ export const SEED_SECTIONS: Section[] = [
       // ----- PACK 2 (pasajes en imagen) -----
       {
         id: "rp2a",
-        title: "Pack 2 · Passage 1",
+        title: "Passage 4",
         imageUrl: "/seed/pack2-1.jpeg",
         items: [
           {
@@ -881,7 +881,7 @@ export const SEED_SECTIONS: Section[] = [
       },
       {
         id: "rp2b",
-        title: "Pack 2 · Passage 2",
+        title: "Passage 5",
         imageUrl: "/seed/pack2-2.jpeg",
         items: [
           {
@@ -938,7 +938,7 @@ export const SEED_SECTIONS: Section[] = [
       },
       {
         id: "rp2c",
-        title: "Pack 2 · Passage 3",
+        title: "Passage 6",
         imageUrl: "/seed/pack2-3.jpeg",
         items: [
           {

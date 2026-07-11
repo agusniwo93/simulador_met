@@ -43,6 +43,32 @@ type Phase = "loading" | "no-exam" | "name-gate" | "exam";
 // Valor de una respuesta: texto (writing) o índice de opción (mcq).
 type AnswerValue = string | number;
 
+// Parte un guion de listening en turnos por hablante para leerlo como una
+// conversación real: la etiqueta ("Woman:", "Man:", …) decide la voz y NO se
+// pronuncia. Woman/Girl → voz de mujer; Man/Boy → voz de hombre.
+type DialogueSeg = { speaker: "female" | "male" | "narrator"; text: string };
+function parseDialogue(transcript: string): DialogueSeg[] {
+  const labelRe = /^(woman|man|girl|boy|female|male|narrator|w|m|speaker\s*[12]?)\s*[:.\-–]\s*/i;
+  const segs: DialogueSeg[] = [];
+  let current: DialogueSeg["speaker"] = "narrator";
+  for (const raw of transcript.split(/\n+/)) {
+    const line = raw.trim();
+    if (!line) continue;
+    const m = line.match(labelRe);
+    let text = line;
+    if (m) {
+      const label = m[1].toLowerCase().replace(/\s+/g, " ");
+      current =
+        /^(woman|girl|female|w|speaker 1)$/.test(label) ? "female"
+        : /^(man|boy|male|m|speaker 2)$/.test(label) ? "male"
+        : "narrator";
+      text = line.slice(m[0].length).trim();
+    }
+    if (text) segs.push({ speaker: current, text });
+  }
+  return segs.length ? segs : [{ speaker: "narrator", text: transcript }];
+}
+
 export default function ExamRunPage() {
   const router = useRouter();
   const { lang, t } = useI18n();
@@ -68,6 +94,32 @@ export default function ExamRunPage() {
   const [ttsSupported, setTtsSupported] = useState(true);
   useEffect(() => {
     setTtsSupported(typeof window !== "undefined" && "speechSynthesis" in window);
+  }, []);
+
+  // Voces de mujer y hombre para leer el listening como una conversación. Se
+  // cargan de forma asíncrona (evento voiceschanged en algunos navegadores).
+  const voicesRef = useRef<{ female: SpeechSynthesisVoice | null; male: SpeechSynthesisVoice | null }>({
+    female: null,
+    male: null,
+  });
+  useEffect(() => {
+    if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
+    const femaleHint = /(female|woman|samantha|victoria|karen|moira|tessa|fiona|zira|susan|allison|ava|serena|kate|catherine|nicky|joana|paulina|google us english)/i;
+    const maleHint = /(\bmale\b|\bman\b|daniel|alex|fred|aaron|david|mark|oliver|thomas|arthur|george|\bguy\b|rishi|\btom\b|james|reed|rocko)/i;
+    const pick = () => {
+      const en = speechSynthesis.getVoices().filter((v) => /^en/i.test(v.lang));
+      const list = en.length ? en : speechSynthesis.getVoices();
+      if (!list.length) return;
+      const female = list.find((v) => femaleHint.test(v.name)) ?? list[0];
+      const male =
+        list.find((v) => maleHint.test(v.name) && v.name !== female.name) ??
+        list.find((v) => v.name !== female.name) ??
+        female;
+      voicesRef.current = { female, male };
+    };
+    pick();
+    speechSynthesis.addEventListener("voiceschanged", pick);
+    return () => speechSynthesis.removeEventListener("voiceschanged", pick);
   }, []);
 
   // ---------- 1) Carga del examen ----------
@@ -223,13 +275,24 @@ export default function ExamRunPage() {
     (itemId: string, transcript: string) => {
       if (!ttsSupported || !transcript) return;
       try {
-        const u = new SpeechSynthesisUtterance(transcript);
-        u.lang = "en-US";
-        u.rate = 0.95;
-        u.onend = () => setSpeakingId((cur) => (cur === itemId ? null : cur));
-        u.onerror = () => setSpeakingId((cur) => (cur === itemId ? null : cur));
         speechSynthesis.cancel();
-        speechSynthesis.speak(u);
+        const segments = parseDialogue(transcript);
+        const { female, male } = voicesRef.current;
+        const last = segments.length - 1;
+        segments.forEach((seg, i) => {
+          const u = new SpeechSynthesisUtterance(seg.text);
+          u.lang = "en-US";
+          u.rate = 0.95;
+          const voice = seg.speaker === "male" ? male : female ?? male;
+          if (voice) u.voice = voice;
+          // Diferencia el tono aunque el navegador tenga una sola voz.
+          u.pitch = seg.speaker === "male" ? 0.8 : seg.speaker === "female" ? 1.15 : 1;
+          if (i === last) {
+            u.onend = () => setSpeakingId((cur) => (cur === itemId ? null : cur));
+          }
+          u.onerror = () => setSpeakingId((cur) => (cur === itemId ? null : cur));
+          speechSynthesis.speak(u);
+        });
         setSpeakingId(itemId);
       } catch {
         setSpeakingId(null);
@@ -760,10 +823,13 @@ export default function ExamRunPage() {
                         />
                       )}
                       <SpeakingRecorder
+                        key={task.id}
                         existingUrl={
                           typeof answers[task.id] === "string" ? (answers[task.id] as string) : null
                         }
                         onUploaded={(url) => setSpeaking(task.id, url)}
+                        promptText={task.prompt}
+                        limitSeconds={n < 2 ? 60 : 90}
                         t={t}
                       />
                     </div>
@@ -922,15 +988,22 @@ function McqCard({
 }
 
 // ---- Grabador de voz para Speaking (MediaRecorder + subida al servidor) ----
-type RecState = "idle" | "recording" | "uploading" | "error";
+// Flujo automático: se lee la pregunta en voz alta y, al terminar, arranca sola
+// la grabación con una cuenta regresiva (60/90 s) que se detiene y sube al llegar
+// a cero. El micrófono se pide dentro del gesto del usuario (requisito en móvil).
+type RecState = "idle" | "reading" | "recording" | "uploading" | "error";
 
 function SpeakingRecorder({
   existingUrl,
   onUploaded,
+  promptText,
+  limitSeconds,
   t,
 }: {
   existingUrl: string | null;
   onUploaded: (url: string) => void;
+  promptText: string;
+  limitSeconds: number;
   t: TFn;
 }) {
   const [state, setState] = useState<RecState>("idle");
@@ -963,6 +1036,7 @@ function SpeakingRecorder({
   useEffect(() => {
     return () => {
       try {
+        if (typeof window !== "undefined" && "speechSynthesis" in window) speechSynthesis.cancel();
         if (recorderRef.current?.state === "recording") recorderRef.current.stop();
       } catch {
         /* ignore */
@@ -989,11 +1063,14 @@ function SpeakingRecorder({
     [onUploaded]
   );
 
-  const start = useCallback(async () => {
-    if (!supported) return;
+  // Arranca la grabación sobre el stream ya abierto (tras leer la pregunta).
+  const recordOnStream = useCallback(() => {
+    const stream = streamRef.current;
+    if (!stream) {
+      setState("error");
+      return;
+    }
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      streamRef.current = stream;
       const mr = new MediaRecorder(stream);
       chunksRef.current = [];
       mr.ondataavailable = (e) => {
@@ -1010,11 +1087,39 @@ function SpeakingRecorder({
       setState("recording");
       timerRef.current = window.setInterval(() => setElapsed((e) => e + 1), 1000);
     } catch {
-      // Permiso denegado o sin micrófono.
       setState("error");
       stopStream();
     }
-  }, [supported, stopStream, upload]);
+  }, [stopStream, upload]);
+
+  // Botón principal: pide micrófono (dentro del gesto) → lee la pregunta →
+  // al terminar la lectura, graba automáticamente.
+  const begin = useCallback(async () => {
+    if (!supported) return;
+    try {
+      streamRef.current = await navigator.mediaDevices.getUserMedia({ audio: true });
+    } catch {
+      setState("error");
+      return;
+    }
+    setState("reading");
+    const go = () => recordOnStream();
+    try {
+      if (typeof window !== "undefined" && "speechSynthesis" in window && promptText) {
+        speechSynthesis.cancel();
+        const u = new SpeechSynthesisUtterance(promptText);
+        u.lang = "en-US";
+        u.rate = 0.95;
+        u.onend = go;
+        u.onerror = go;
+        speechSynthesis.speak(u);
+      } else {
+        go();
+      }
+    } catch {
+      go();
+    }
+  }, [supported, promptText, recordOnStream]);
 
   const stop = useCallback(() => {
     try {
@@ -1028,7 +1133,13 @@ function SpeakingRecorder({
     }
   }, []);
 
+  // Auto-detiene al llegar al límite de tiempo.
+  useEffect(() => {
+    if (state === "recording" && elapsed >= limitSeconds) stop();
+  }, [state, elapsed, limitSeconds, stop]);
+
   const fmt = (s: number) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+  const remaining = Math.max(0, limitSeconds - elapsed);
 
   if (!supported) {
     return (
@@ -1040,14 +1151,29 @@ function SpeakingRecorder({
 
   return (
     <div className="mt-4 flex flex-col gap-3">
+      {(state === "idle" || state === "error") && (
+        <p className="text-xs text-slate-400">
+          {t("exam.speakAutoHint", { s: limitSeconds })}
+        </p>
+      )}
+
       <div className="flex flex-wrap items-center gap-3">
-        {state === "recording" ? (
+        {state === "reading" ? (
+          <span className="inline-flex items-center gap-2 rounded-full glass px-5 py-2.5 text-sm font-bold text-cyan-200">
+            <span className="flex items-end gap-0.5" aria-hidden>
+              <span className="h-2 w-0.5 animate-pulse bg-cyan-300" />
+              <span className="h-3 w-0.5 animate-pulse bg-cyan-300 [animation-delay:120ms]" />
+              <span className="h-1.5 w-0.5 animate-pulse bg-cyan-300 [animation-delay:240ms]" />
+            </span>
+            {t("exam.speakReading")}
+          </span>
+        ) : state === "recording" ? (
           <button
             onClick={stop}
             className="inline-flex items-center gap-2 rounded-full bg-gradient-to-r from-rose-500 to-red-600 px-5 py-2.5 text-sm font-bold text-white shadow-[0_8px_24px_-10px_rgba(244,63,94,0.7)] transition hover:brightness-110 active:scale-95"
           >
             <span className="h-2.5 w-2.5 rounded-sm bg-white" aria-hidden />
-            {t("exam.stop")} · {fmt(elapsed)}
+            {t("exam.stop")} · {fmt(remaining)}
           </button>
         ) : state === "uploading" ? (
           <span className="inline-flex items-center gap-2 rounded-full glass px-5 py-2.5 text-sm font-bold text-slate-300">
@@ -1056,15 +1182,19 @@ function SpeakingRecorder({
           </span>
         ) : (
           <button
-            onClick={start}
+            onClick={begin}
             className="inline-flex items-center gap-2 rounded-full bg-gradient-to-r from-cyan-500 to-indigo-600 px-5 py-2.5 text-sm font-bold text-white shadow-[0_8px_24px_-10px_rgba(99,102,241,0.7)] transition hover:brightness-110 active:scale-95"
           >
-            <span className="h-2.5 w-2.5 rounded-full bg-white animate-pulse" aria-hidden />
-            {existingUrl ? t("exam.rerecord") : t("exam.record")}
+            <span aria-hidden>▶</span>
+            {existingUrl ? t("exam.rerecord") : t("exam.speakStart")}
           </button>
         )}
 
-        {existingUrl && state !== "recording" && (
+        {state === "recording" && (
+          <span className="text-xs font-semibold text-slate-400">{t("exam.speakAutoStop")}</span>
+        )}
+
+        {existingUrl && (state === "idle" || state === "error") && (
           <span className="inline-flex items-center gap-1.5 text-xs font-bold uppercase tracking-wide text-emerald-300">
             <span aria-hidden>✓</span> {t("exam.recorded")}
           </span>
@@ -1077,7 +1207,7 @@ function SpeakingRecorder({
         </p>
       )}
 
-      {existingUrl && state !== "recording" && (
+      {existingUrl && (state === "idle" || state === "error") && (
         <audio controls src={existingUrl} className="w-full max-w-md" />
       )}
     </div>
