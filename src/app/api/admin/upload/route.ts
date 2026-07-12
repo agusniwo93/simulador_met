@@ -4,7 +4,7 @@ import path from "path";
 import { cookies } from "next/headers";
 import { ADMIN_COOKIE, hasAdminSession } from "@/lib/auth/admin-session";
 import { createExam, UPLOAD_DIR } from "@/lib/db";
-import { extractPdfText, parseTemplate } from "@/lib/exam/pdf-template";
+import { extractPdfText, parseExam } from "@/lib/exam/pdf-template";
 
 export async function POST(req: Request) {
   const store = await cookies();
@@ -29,8 +29,8 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "parseError" }, { status: 422 });
   }
 
-  const { title, tasks } = parseTemplate(text);
-  if (tasks.length === 0) {
+  const { title, sections } = parseExam(text);
+  if (sections.length === 0) {
     return NextResponse.json({ error: "parseError" }, { status: 422 });
   }
 
@@ -39,10 +39,21 @@ export async function POST(req: Request) {
 
   const exam = createExam({
     title: customTitle || title,
-    durationMinutes: 45,
+    durationMinutes: 90,
     sourceFile: safeName,
-    sections: [{ kind: "writing", title: "Writing", writingTasks: tasks }],
+    sections,
   });
 
-  return NextResponse.json({ exam, parsedCount: tasks.length });
+  // Nº de preguntas/tareas reconocidas (para el mensaje de éxito del admin).
+  const parsedCount = sections.reduce(
+    (n, s) =>
+      n +
+      (s.writingTasks?.length ?? 0) +
+      (s.items?.length ?? 0) +
+      (s.speakingTasks?.length ?? 0) +
+      (s.passages?.reduce((a, p) => a + p.items.length, 0) ?? 0),
+    0
+  );
+
+  return NextResponse.json({ exam, parsedCount });
 }
