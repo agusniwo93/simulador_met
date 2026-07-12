@@ -92,7 +92,9 @@ interface SectionSlice {
   startPage: number;
 }
 
-function splitExamSections(text: string): { title: string; sections: Record<string, SectionSlice> } {
+function splitExamSections(
+  text: string
+): { title: string; head: string; sections: Record<string, SectionSlice> } {
   const re = /^\s*(WRITING|LISTENING|GRAMMAR|READING|SPEAKING)\s*$/gim;
   const marks: { kind: SectionKindStr; start: number; end: number }[] = [];
   let m: RegExpExecArray | null;
@@ -115,7 +117,7 @@ function splitExamSections(text: string): { title: string; sections: Record<stri
       sections[marks[i].kind].content += "\n" + content;
     }
   }
-  return { title, sections };
+  return { title, head, sections };
 }
 
 function parseWritingSection(content: string): WritingTask[] {
@@ -217,58 +219,89 @@ function parseReadingQuestions(lines: string[], startIdx: number, idPrefix: stri
   return items;
 }
 
+// Parsea un pasaje de texto (título + texto + preguntas) desde un bloque.
+function parseTextPassage(block: string, idPrefix: string): ReadingPassage | null {
+  const lines = block
+    .split("\n")
+    .map((l) => l.replace(/@@P\d+@@/g, "").trim())
+    .filter(Boolean);
+  if (!lines.length) return null;
+  const title = lines[0];
+  let j = 1;
+  const passageLines: string[] = [];
+  while (j < lines.length) {
+    const numbered = /^\d+\.\s/.test(lines[j]);
+    const qmark = /\?\s*$/.test(lines[j]) && [1, 2].some((k) => lines[j + k] && isOpt(lines[j + k]));
+    if ((numbered || qmark) && !isOpt(lines[j]) && !isAns(lines[j])) break;
+    passageLines.push(lines[j]);
+    j++;
+  }
+  const items = parseReadingQuestions(lines, j, idPrefix);
+  if (!items.length) return null;
+  return { id: idPrefix, title, text: passageLines.join("\n"), items };
+}
+
 function parseReadingSection(
   content: string,
   startPage: number,
   imagesByPage: ImagesByPage
 ): ReadingPassage[] {
-  const marks = [...content.matchAll(/(Text|PACK)\s*\d+/gi)].map((m) => ({
-    type: m[1].toUpperCase(),
-    start: m.index as number,
-    end: (m.index as number) + m[0].length,
-  }));
   const passages: ReadingPassage[] = [];
 
-  for (let i = 0; i < marks.length; i++) {
-    const block = content.slice(marks[i].end, i + 1 < marks.length ? marks[i + 1].start : content.length);
-    const page = pageInContent(content, marks[i].start, startPage);
+  // La parte de "pasajes de texto" va hasta el primer bloque por-imagen
+  // (PACK / "PARTE 2" agrupada), que se maneja aparte (necesita imágenes).
+  const cut = content.search(/PACK\s*\d|READING\s+PARTE|(?:^|\n)\s*PARTE\s*[23]/i);
+  const textContent = cut >= 0 ? content.slice(0, cut) : content;
 
-    // PACK = preguntas basadas en anuncios (una imagen por página). Se divide en
-    // sub-bloques por página y se asocia a cada uno el anuncio de esa página.
-    if (marks[i].type === "PACK") {
-      block.split(/@@P\d+@@/).forEach((chunk, ci) => {
-        const chunkLines = chunk.split("\n").map((l) => l.trim()).filter(Boolean);
-        const items = parseReadingQuestions(chunkLines, 0, `r${passages.length + 1}`);
-        if (!items.length) return; // sin preguntas, no consumir imagen
-        const imageUrl = imagesByPage[page + ci]?.shift();
-        if (imageUrl) passages.push({ id: `p${passages.length + 1}`, imageUrl, items });
-      });
-      continue;
-    }
-
-    const lines = block
-      .split("\n")
-      .map((l) => l.replace(/@@P\d+@@/g, "").trim())
-      .filter(Boolean);
-    if (!lines.length) continue;
-    const idPrefix = `r${passages.length + 1}`;
-
-    // Text = pasaje con título + texto + preguntas.
-    const title = lines[0];
-    let j = 1;
-    const passageLines: string[] = [];
-    while (j < lines.length) {
-      const numbered = /^\d+\.\s/.test(lines[j]);
-      const qmark = /\?\s*$/.test(lines[j]) && [1, 2].some((k) => lines[j + k] && isOpt(lines[j + k]));
-      if ((numbered || qmark) && !isOpt(lines[j]) && !isAns(lines[j])) break;
-      passageLines.push(lines[j]);
-      j++;
-    }
-    const items = parseReadingQuestions(lines, j, idPrefix);
-    if (items.length) {
-      passages.push({ id: `p${passages.length + 1}`, title, text: passageLines.join("\n"), items });
+  // Fronteras de pasaje: "Text N" (título en la línea siguiente) o
+  // "This passage is about…" (el título va incluido).
+  type B = { markerStart: number; contentStart: number };
+  const boundaries: B[] = [];
+  const re = /(Text\s*\d+|This passage is about[^\n]*)/gi;
+  let mm: RegExpExecArray | null;
+  while ((mm = re.exec(textContent))) {
+    const token = mm[1];
+    if (/^Text/i.test(token)) {
+      boundaries.push({ markerStart: mm.index, contentStart: mm.index + token.length });
+    } else {
+      boundaries.push({ markerStart: mm.index, contentStart: mm.index }); // incluye el título
     }
   }
+  // Un "This passage is about" justo tras un "Text N" es el título de ese Text.
+  const bounds: B[] = [];
+  for (const b of boundaries) {
+    const prev = bounds[bounds.length - 1];
+    if (prev && b.contentStart === b.markerStart && b.markerStart - prev.contentStart < 40) continue;
+    bounds.push(b);
+  }
+  // Pasaje inicial (empieza directo tras "READING", sin "Text N").
+  if (!bounds.length || bounds[0].markerStart > 5) {
+    bounds.unshift({ markerStart: 0, contentStart: 0 });
+  }
+
+  for (let i = 0; i < bounds.length; i++) {
+    const blockEnd = i + 1 < bounds.length ? bounds[i + 1].markerStart : textContent.length;
+    const block = textContent.slice(bounds[i].contentStart, blockEnd);
+    const p = parseTextPassage(block, `p${passages.length + 1}`);
+    if (p) passages.push(p);
+  }
+
+  // Bloques PACK (anuncios) con imagen — solo si hay imágenes (PDF).
+  const packMarks = [...content.matchAll(/PACK\s*\d+/gi)];
+  for (let i = 0; i < packMarks.length; i++) {
+    const mk = packMarks[i];
+    const start = (mk.index as number) + mk[0].length;
+    const end = i + 1 < packMarks.length ? (packMarks[i + 1].index as number) : content.length;
+    const page = pageInContent(content, mk.index as number, startPage);
+    content.slice(start, end).split(/@@P\d+@@/).forEach((chunk, ci) => {
+      const chunkLines = chunk.split("\n").map((l) => l.trim()).filter(Boolean);
+      const items = parseReadingQuestions(chunkLines, 0, `p${passages.length + 1}`);
+      if (!items.length) return;
+      const imageUrl = imagesByPage[page + ci]?.shift();
+      if (imageUrl) passages.push({ id: `p${passages.length + 1}`, imageUrl, items });
+    });
+  }
+
   return passages;
 }
 
@@ -307,11 +340,14 @@ export function parseExam(rawText: string, imagesByPage: ImagesByPage = {}): Par
   for (const [k, v] of Object.entries(imagesByPage)) images[Number(k)] = [...v];
 
   const text = normalizeExamText(rawText);
-  const { title, sections: raw } = splitExamSections(text);
+  const { title, head, sections: raw } = splitExamSections(text);
   const sections: Section[] = [];
 
-  if (raw.WRITING) {
-    const writingTasks = parseWritingSection(raw.WRITING.content);
+  // Writing: por su encabezado, o (si falta) del contenido inicial cuando el
+  // documento arranca directamente con los prompts (sin "WRITING").
+  const writingSource = raw.WRITING?.content ?? (!raw.WRITING && head.trim().length > 30 ? head : "");
+  if (writingSource) {
+    const writingTasks = parseWritingSection(writingSource);
     if (writingTasks.length) sections.push({ kind: "writing", title: "Writing", writingTasks });
   }
   if (raw.LISTENING) {
