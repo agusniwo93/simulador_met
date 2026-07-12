@@ -40,6 +40,9 @@ export async function PUT(req: Request) {
   if (typeof body.allowListeningReplay === "boolean") {
     patch.allowListeningReplay = body.allowListeningReplay;
   }
+  if (typeof body.shuffle === "boolean") {
+    patch.shuffle = body.shuffle;
+  }
 
   return NextResponse.json({ config: saveExamConfig(patch) });
 }

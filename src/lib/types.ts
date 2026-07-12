@@ -151,11 +151,14 @@ export interface ExamConfig {
   sectionMinutes: Record<SectionKind, number>;
   // Permitir repetir el audio del Listening.
   allowListeningReplay: boolean;
+  // "Chocolatear": mezclar preguntas de todos los exámenes + barajar orden y opciones.
+  shuffle: boolean;
 }
 
 export const DEFAULT_EXAM_CONFIG: ExamConfig = {
   sectionMinutes: { writing: 30, listening: 20, grammar: 15, reading: 25, speaking: 15 },
   allowListeningReplay: false,
+  shuffle: true,
 };
 
 // ---- Pagos (ingresos) ----

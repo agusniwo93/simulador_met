@@ -341,6 +341,7 @@ export function getExamConfig(): ExamConfig {
   return {
     sectionMinutes: { ...DEFAULT_EXAM_CONFIG.sectionMinutes, ...(cfg?.sectionMinutes ?? {}) },
     allowListeningReplay: cfg?.allowListeningReplay ?? DEFAULT_EXAM_CONFIG.allowListeningReplay,
+    shuffle: cfg?.shuffle ?? DEFAULT_EXAM_CONFIG.shuffle,
   };
 }
 
@@ -350,6 +351,7 @@ export function saveExamConfig(patch: Partial<ExamConfig>): ExamConfig {
     db.examConfig = {
       sectionMinutes: { ...cur.sectionMinutes, ...(patch.sectionMinutes ?? {}) },
       allowListeningReplay: patch.allowListeningReplay ?? cur.allowListeningReplay,
+      shuffle: patch.shuffle ?? cur.shuffle,
     };
     return db.examConfig;
   });
