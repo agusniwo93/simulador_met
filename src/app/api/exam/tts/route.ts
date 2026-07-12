@@ -1,13 +1,17 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { ACCESS_COOKIE, hasValidAccess } from "@/lib/auth/access";
+import { ADMIN_COOKIE, hasAdminSession } from "@/lib/auth/admin-session";
 import { ttsConfigured, synthesize } from "@/lib/tts/elevenlabs";
 
 // Genera el audio (ElevenLabs) del listening/speaking. Requiere pase de acceso
-// para no exponer los créditos de la API a cualquiera.
+// (alumno que pagó) o sesión de admin (para la vista previa), para no exponer
+// los créditos de la API a cualquiera.
 export async function POST(req: Request) {
   const store = await cookies();
-  if (!(await hasValidAccess(store.get(ACCESS_COOKIE)?.value))) {
+  const paid = await hasValidAccess(store.get(ACCESS_COOKIE)?.value);
+  const admin = await hasAdminSession(store.get(ADMIN_COOKIE)?.value);
+  if (!paid && !admin) {
     return NextResponse.json({ error: "payment_required" }, { status: 402 });
   }
   if (!ttsConfigured()) {

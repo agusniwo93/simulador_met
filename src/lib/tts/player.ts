@@ -3,6 +3,8 @@
 // poder reproducir por código después de un fetch asíncrono). Cachea los blobs
 // por texto para no re-pedirlos.
 
+import { parseDialogue } from "@/lib/exam/dialogue";
+
 let sharedAudio: HTMLAudioElement | null = null;
 let unlocked = false;
 const cache = new Map<string, string>(); // texto → objectURL
@@ -100,4 +102,70 @@ export async function playTTS(text: string, opts?: { dialogue?: boolean }): Prom
     const p = a.play();
     if (p && typeof p.catch === "function") p.catch(reject);
   });
+}
+
+// ---------- Voz del navegador con dos voces (respaldo de ElevenLabs) ----------
+
+let voices: { female: SpeechSynthesisVoice | null; male: SpeechSynthesisVoice | null } | null = null;
+
+function loadVoices(): void {
+  if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
+  const femaleHint = /(female|woman|samantha|victoria|karen|moira|tessa|fiona|zira|susan|allison|ava|serena|kate|catherine|nicky|joana|paulina|google us english)/i;
+  const maleHint = /(\bmale\b|\bman\b|daniel|alex|fred|aaron|david|mark|oliver|thomas|arthur|george|\bguy\b|rishi|\btom\b|james|reed|rocko)/i;
+  const en = speechSynthesis.getVoices().filter((v) => /^en/i.test(v.lang));
+  const list = en.length ? en : speechSynthesis.getVoices();
+  if (!list.length) return;
+  const female = list.find((v) => femaleHint.test(v.name)) ?? list[0];
+  const male =
+    list.find((v) => maleHint.test(v.name) && v.name !== female.name) ??
+    list.find((v) => v.name !== female.name) ??
+    female;
+  voices = { female, male };
+}
+
+if (typeof window !== "undefined" && "speechSynthesis" in window) {
+  loadVoices();
+  speechSynthesis.addEventListener("voiceschanged", loadVoices);
+}
+
+// Lee un guion como conversación con la voz del navegador: distinta voz (y tono)
+// para mujer/hombre según "Woman:"/"Man:", SIN pronunciar la etiqueta.
+export function speakDialogueBrowser(transcript: string, onEnd?: () => void): void {
+  if (typeof window === "undefined" || !("speechSynthesis" in window) || !transcript) {
+    onEnd?.();
+    return;
+  }
+  try {
+    speechSynthesis.cancel();
+    if (!voices) loadVoices();
+    const segs = parseDialogue(transcript);
+    const last = segs.length - 1;
+    segs.forEach((seg, i) => {
+      const u = new SpeechSynthesisUtterance(seg.text);
+      u.lang = "en-US";
+      u.rate = 0.95;
+      const v = seg.speaker === "male" ? voices?.male : voices?.female ?? voices?.male;
+      if (v) u.voice = v;
+      u.pitch = seg.speaker === "male" ? 0.8 : seg.speaker === "female" ? 1.15 : 1;
+      if (i === last && onEnd) u.onend = onEnd;
+      speechSynthesis.speak(u);
+    });
+  } catch {
+    onEnd?.();
+  }
+}
+
+// Reproduce el listening con ElevenLabs (dos voces) y, si no está disponible,
+// cae a la voz del navegador con dos voces. Llamar dentro de un gesto (clic).
+export function speakDialogue(transcript: string, onEnd?: () => void): void {
+  if (!transcript) {
+    onEnd?.();
+    return;
+  }
+  unlockAudio();
+  stopAudio();
+  if (typeof window !== "undefined" && "speechSynthesis" in window) speechSynthesis.cancel();
+  playTTS(transcript, { dialogue: true })
+    .then(() => onEnd?.())
+    .catch(() => speakDialogueBrowser(transcript, onEnd));
 }

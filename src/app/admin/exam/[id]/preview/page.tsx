@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Background3D from "@/components/visual/Background3D";
+import { speakDialogue, stopAudio } from "@/lib/tts/player";
 import type { Exam, Section, McqItem } from "@/lib/types";
 
 const LETTERS = ["A", "B", "C", "D", "E", "F"];
@@ -30,31 +31,25 @@ export default function ExamPreviewPage() {
   }, [id, router]);
 
   const speak = useCallback((itemId: string, text: string) => {
-    if (typeof window === "undefined" || !("speechSynthesis" in window) || !text) return;
-    try {
-      const u = new SpeechSynthesisUtterance(text);
-      u.lang = "en-US";
-      u.rate = 0.95;
-      u.onend = () => setSpeakingId((c) => (c === itemId ? null : c));
-      u.onerror = () => setSpeakingId((c) => (c === itemId ? null : c));
-      speechSynthesis.cancel();
-      speechSynthesis.speak(u);
-      setSpeakingId(itemId);
-    } catch {
-      setSpeakingId(null);
-    }
+    if (!text) return;
+    setSpeakingId(itemId);
+    // Misma reproducción que el examen real: ElevenLabs (dos voces) con respaldo
+    // a la voz del navegador con voces de mujer/hombre.
+    speakDialogue(text, () => setSpeakingId((c) => (c === itemId ? null : c)));
   }, []);
 
   useEffect(() => {
     return () => {
+      stopAudio();
       if (typeof window !== "undefined" && "speechSynthesis" in window) speechSynthesis.cancel();
     };
   }, []);
 
-  // Al cambiar de sección: detener cualquier locución. onend/onerror de la
-  // locución cancelada se encarga de limpiar el estado "reproduciendo".
+  // Al cambiar de sección: detener cualquier locución.
   useEffect(() => {
+    stopAudio();
     if (typeof window !== "undefined" && "speechSynthesis" in window) speechSynthesis.cancel();
+    setSpeakingId(null);
   }, [active]);
 
   if (loading) {
@@ -94,8 +89,7 @@ export default function ExamPreviewPage() {
           <div className="min-w-0">
             <div className="flex items-center gap-2">
               <span className="text-base font-bold italic sm:text-lg">
-                Exam<span className="text-cyan-400">Bridge</span>{" "}
-                <span className="not-italic text-cyan-400">MET</span>
+                Learning<span className="not-italic font-light text-cyan-400">English</span>
               </span>
               <span className="rounded-full bg-amber-400/15 px-2 py-0.5 text-[10px] font-black uppercase tracking-wider text-amber-300 ring-1 ring-amber-400/30">
                 Vista previa
@@ -234,7 +228,7 @@ function SectionPreview({
                     onClick={() => speak(item.id, item.transcript!)}
                     className="inline-flex items-center gap-2 rounded-full bg-gradient-to-r from-cyan-500 to-indigo-600 px-4 py-2 text-xs font-bold text-white transition hover:brightness-110"
                   >
-                    {speakingId === item.id ? "♪ Reproduciendo…" : "▶ Escuchar"}
+                    {speakingId === item.id ? "♪ Playing…" : "▶ Listen"}
                   </button>
                 ) : null
               }
@@ -320,13 +314,13 @@ function McqPreview({
   return (
     <div className="glass rounded-3xl p-5 sm:p-6">
       <div className="flex items-center justify-between gap-3">
-        <span className="text-xs font-bold uppercase tracking-wide text-cyan-400/80">Pregunta {number}</span>
+        <span className="text-xs font-bold uppercase tracking-wide text-cyan-400/80">Question {number}</span>
         {audio}
       </div>
 
       {transcript && (
         <p className="mt-3 whitespace-pre-line rounded-xl border border-white/10 bg-slate-950/50 p-3 text-xs italic leading-relaxed text-slate-400">
-          Transcripción (solo admin): {transcript}
+          Transcript (admin only): {transcript}
         </p>
       )}
 
