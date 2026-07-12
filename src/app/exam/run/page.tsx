@@ -10,15 +10,35 @@ import { useI18n } from "@/lib/i18n/context";
 import { playTTS, unlockAudio } from "@/lib/tts/player";
 import { useListenPlayer } from "@/lib/tts/useListenPlayer";
 import ListenControls from "@/components/exam/ListenControls";
-import type { Exam, Section, McqItem } from "@/lib/types";
+import type { Exam, Section, McqItem, ExamConfig } from "@/lib/types";
+import { DEFAULT_EXAM_CONFIG } from "@/lib/types";
 
 type TFn = (path: string, params?: Record<string, string | number>) => string;
 
 // ----- Claves de almacenamiento -----
 const LS_EXAM = "met_exam";
 const LS_ANSWERS = "met_exam_answers";
-const LS_END = "met_exam_end";
+const LS_END = "met_exam_end"; // (legado, ya no se usa)
 const LS_NAME = "met_student_name";
+const LS_CONFIG = "met_exam_config";
+const LS_DEADLINES = "met_section_deadlines"; // { [sectionIndex]: timestamp }
+const LS_PLAYED = "met_listening_played"; // ids de listening ya reproducidos
+
+function readJson<T>(key: string, fallback: T): T {
+  try {
+    const raw = localStorage.getItem(key);
+    return raw ? (JSON.parse(raw) as T) : fallback;
+  } catch {
+    return fallback;
+  }
+}
+function writeJson(key: string, value: unknown) {
+  try {
+    localStorage.setItem(key, JSON.stringify(value));
+  } catch {
+    /* ignore */
+  }
+}
 
 // Cuenta palabras: recorta y separa por espacios; vacío = 0.
 function countWords(text: string): number {
@@ -57,8 +77,11 @@ export default function ExamRunPage() {
   const [answers, setAnswers] = useState<Record<string, AnswerValue>>({});
   const [activeSection, setActiveSection] = useState(0);
   const [secondsRemaining, setSecondsRemaining] = useState<number | null>(null);
+  const [config, setConfig] = useState<ExamConfig>(DEFAULT_EXAM_CONFIG);
+  const [played, setPlayed] = useState<string[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const [nextOpen, setNextOpen] = useState(false);
   const [errorOpen, setErrorOpen] = useState(false);
   const listen = useListenPlayer();
 
@@ -89,6 +112,8 @@ export default function ExamRunPage() {
 
     function bootstrap(ex: Exam) {
       setExam(ex);
+      setConfig(readJson<ExamConfig>(LS_CONFIG, DEFAULT_EXAM_CONFIG));
+      setPlayed(readJson<string[]>(LS_PLAYED, []));
 
       // Restaurar respuestas guardadas.
       try {
@@ -138,7 +163,7 @@ export default function ExamRunPage() {
           return;
         }
 
-        const data = (await res.json()) as { exam: Exam };
+        const data = (await res.json()) as { exam: Exam; config?: ExamConfig };
         if (!isValidExam(data?.exam)) {
           if (!cancelled) setPhase("no-exam");
           return;
@@ -146,6 +171,7 @@ export default function ExamRunPage() {
 
         try {
           localStorage.setItem(LS_EXAM, JSON.stringify(data.exam));
+          if (data.config) writeJson(LS_CONFIG, data.config);
         } catch {
           /* ignore quota errors */
         }
@@ -171,42 +197,52 @@ export default function ExamRunPage() {
     }
   }, [answers, phase]);
 
-  // ---------- 3) Temporizador con timestamp absoluto ----------
+  // ---------- 3) Avance de sección (secuencial, sin volver atrás) ----------
+  const advanceSection = useCallback(() => {
+    listen.stop();
+    setActiveSection((i) => {
+      const last = (exam?.sections.length ?? 1) - 1;
+      if (i < last) return i + 1;
+      // Última sección: enviar el examen.
+      if (!autoSubmitFiredRef.current && !submittingRef.current) {
+        autoSubmitFiredRef.current = true;
+        submitRef.current(true);
+      }
+      return i;
+    });
+  }, [exam, listen.stop]);
+  const advanceRef = useRef(advanceSection);
+  useEffect(() => {
+    advanceRef.current = advanceSection;
+  }, [advanceSection]);
+
+  // ---------- 3b) Temporizador POR SECCIÓN (arranca al entrar) ----------
   useEffect(() => {
     if (phase !== "exam" || !exam) return;
+    const kind = exam.sections[activeSection]?.kind;
+    const minutes = config.sectionMinutes[kind] ?? 0;
+    if (!minutes) {
+      setSecondsRemaining(null); // 0 = sin límite
+      return;
+    }
 
-    const durationS = exam.durationMinutes * 60;
-
-    // Establece el fin absoluto la primera vez que se muestra el examen.
-    let endTs: number;
-    const stored = localStorage.getItem(LS_END);
-    const parsed = stored ? Number(stored) : NaN;
-    if (Number.isFinite(parsed) && stored) {
-      // Ya existe (vigente o expirado): respetarlo.
-      endTs = parsed;
-    } else {
-      endTs = Date.now() + durationS * 1000;
-      try {
-        localStorage.setItem(LS_END, String(endTs));
-      } catch {
-        /* ignore */
-      }
+    const deadlines = readJson<Record<number, number>>(LS_DEADLINES, {});
+    let endTs = deadlines[activeSection];
+    if (!endTs) {
+      endTs = Date.now() + minutes * 60000;
+      deadlines[activeSection] = endTs;
+      writeJson(LS_DEADLINES, deadlines);
     }
 
     const tick = () => {
       const remaining = Math.max(0, Math.round((endTs - Date.now()) / 1000));
       setSecondsRemaining(remaining);
-      if (remaining <= 0 && !autoSubmitFiredRef.current && !submittingRef.current) {
-        autoSubmitFiredRef.current = true;
-        submitRef.current(true);
-      }
+      if (remaining <= 0) advanceRef.current();
     };
-
-    tick(); // primer cálculo inmediato
+    tick();
     const id = window.setInterval(tick, 1000);
     return () => window.clearInterval(id);
-    // NO incluir secondsRemaining en deps: un único intervalo.
-  }, [phase, exam]);
+  }, [phase, exam, config, activeSection]);
 
   // ---------- Manejo de respuestas ----------
   const setWriting = useCallback((taskId: string, value: string) => {
@@ -219,6 +255,17 @@ export default function ExamRunPage() {
 
   const setSpeaking = useCallback((taskId: string, url: string) => {
     setAnswers((prev) => ({ ...prev, [taskId]: url }));
+  }, []);
+
+  // Marca un audio de listening como reproducido (para no repetir si está
+  // deshabilitada la repetición).
+  const markPlayed = useCallback((itemId: string) => {
+    setPlayed((prev) => {
+      if (prev.includes(itemId)) return prev;
+      const next = [...prev, itemId];
+      writeJson(LS_PLAYED, next);
+      return next;
+    });
   }, []);
 
   // Al cambiar de sección, detener el listening en curso.
@@ -259,10 +306,9 @@ export default function ExamRunPage() {
 
         // Limpieza de almacenamiento al terminar.
         try {
-          localStorage.removeItem(LS_EXAM);
-          localStorage.removeItem(LS_ANSWERS);
-          localStorage.removeItem(LS_END);
-          localStorage.removeItem(LS_NAME);
+          [LS_EXAM, LS_ANSWERS, LS_END, LS_NAME, LS_CONFIG, LS_DEADLINES, LS_PLAYED].forEach((k) =>
+            localStorage.removeItem(k)
+          );
         } catch {
           /* ignore */
         }
@@ -469,7 +515,7 @@ export default function ExamRunPage() {
               <span className="hidden sm:inline text-[11px] font-medium uppercase tracking-wide text-slate-400">
                 {t("exam.timeRemaining")}
               </span>
-              <span>{formatTime(secondsRemaining ?? 0, showHours)}</span>
+              <span>{secondsRemaining == null ? "∞" : formatTime(secondsRemaining, showHours)}</span>
             </div>
 
             {/* Finalizar */}
@@ -486,32 +532,30 @@ export default function ExamRunPage() {
         {/* Tab bar de secciones */}
         <div className="mx-auto max-w-7xl overflow-x-auto px-3 pb-3 sm:px-6">
           <div className="flex gap-2">
+            {/* Secuencial: las secciones NO son clickeables. Indicador de progreso. */}
             {exam?.sections.map((s, i) => {
               const isActive = i === activeSection;
+              const isDone = i < activeSection; // ya cerrada (no se puede volver)
               const { answered, total } = sectionAnswered(s);
-              const done = total > 0 && answered >= total;
               return (
-                <button
+                <div
                   key={`${s.kind}-${i}`}
-                  onClick={() => setActiveSection(i)}
-                  aria-pressed={isActive}
-                  className={`group flex shrink-0 items-center gap-2 rounded-full px-3.5 py-1.5 text-xs font-semibold transition-all ${
+                  className={`flex shrink-0 items-center gap-2 rounded-full px-3.5 py-1.5 text-xs font-semibold ${
                     isActive
                       ? "bg-gradient-to-r from-cyan-500 to-indigo-600 text-white shadow-[0_8px_24px_-10px_rgba(99,102,241,0.7)]"
-                      : "glass text-slate-300 hover:bg-white/10"
+                      : isDone
+                      ? "glass text-slate-400"
+                      : "glass text-slate-500 opacity-60"
                   }`}
                 >
-                  <span
-                    className={`h-1.5 w-1.5 rounded-full ${
-                      done ? "bg-emerald-400" : isActive ? "bg-white/80" : "bg-amber-400"
-                    }`}
-                    aria-hidden
-                  />
+                  <span aria-hidden>{isDone ? "✓" : isActive ? "•" : "🔒"}</span>
                   <span className="max-w-[8rem] truncate sm:max-w-[12rem]">{s.title}</span>
-                  <span className={isActive ? "text-white/70" : "text-slate-500"}>
-                    {answered}/{total}
-                  </span>
-                </button>
+                  {isActive && (
+                    <span className="text-white/70">
+                      {answered}/{total}
+                    </span>
+                  )}
+                </div>
               );
             })}
           </div>
@@ -632,10 +676,14 @@ export default function ExamRunPage() {
                               player={listen}
                               id={item.id}
                               transcript={item.transcript}
+                              played={played.includes(item.id)}
+                              allowReplay={config.allowListeningReplay}
+                              onPlay={() => markPlayed(item.id)}
                               labels={{
                                 listen: t("exam.listenPlay"),
                                 playing: t("exam.listenPlaying"),
                                 loading: t("common.loading"),
+                                played: t("exam.listenPlayed"),
                               }}
                             />
                           ) : null
@@ -731,22 +779,14 @@ export default function ExamRunPage() {
                 </div>
               )}
 
-              {/* ----- Navegación prev/next ----- */}
-              <div className="mt-8 flex items-center justify-between gap-3">
-                <button
-                  onClick={() => setActiveSection((i) => Math.max(0, i - 1))}
-                  disabled={activeSection === 0}
-                  className="inline-flex items-center gap-2 rounded-2xl px-5 py-2.5 text-sm font-semibold text-slate-200 glass transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40"
-                >
-                  <span aria-hidden>←</span> {t("exam.prev")}
-                </button>
-
+              {/* ----- Navegación (secuencial: solo avanzar) ----- */}
+              <div className="mt-8 flex items-center justify-end gap-3">
                 {activeSection < totalSections - 1 ? (
                   <button
-                    onClick={() => setActiveSection((i) => Math.min(totalSections - 1, i + 1))}
+                    onClick={() => setNextOpen(true)}
                     className="btn-primary inline-flex items-center gap-2 rounded-2xl px-6 py-2.5 text-sm font-bold"
                   >
-                    {t("exam.next")} <span aria-hidden>→</span>
+                    {t("exam.nextSection")} <span aria-hidden>→</span>
                   </button>
                 ) : (
                   <button
@@ -784,6 +824,22 @@ export default function ExamRunPage() {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Confirmar avanzar de sección (no se puede volver) */}
+      <Dialog
+        open={nextOpen}
+        onClose={() => setNextOpen(false)}
+        icon="⏭️"
+        tone="danger"
+        title={t("exam.nextSectionTitle")}
+        description={t("exam.nextSectionWarn")}
+        confirmLabel={t("exam.nextSection")}
+        cancelLabel={t("common.cancel")}
+        onConfirm={() => {
+          setNextOpen(false);
+          advanceSection();
+        }}
+      />
 
       {/* Confirmar finalizar */}
       <Dialog

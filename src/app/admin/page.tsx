@@ -6,8 +6,8 @@ import { motion } from "framer-motion";
 import Background3D from "@/components/visual/Background3D";
 import Dialog from "@/components/ui/Dialog";
 import { useT } from "@/lib/i18n/context";
-import type { Exam, Analytics, ThemeSettings } from "@/lib/types";
-import { DEFAULT_THEME } from "@/lib/types";
+import type { Exam, Analytics, ThemeSettings, ExamConfig, SectionKind } from "@/lib/types";
+import { DEFAULT_THEME, DEFAULT_EXAM_CONFIG } from "@/lib/types";
 
 type Banner = { kind: "success" | "error"; text: string } | null;
 
@@ -140,6 +140,8 @@ export default function AdminPage() {
         <AnalyticsPanel analytics={analytics} t={t} onChange={loadData} />
 
         {/* ====== TEMA DE COLORES ====== */}
+        <ExamConfigPanel t={t} />
+
         <ThemePanel theme={theme} onSaved={setTheme} />
 
         {/* ====== UPLOAD ====== */}
@@ -278,6 +280,120 @@ export default function AdminPage() {
         onConfirm={doRemoveExam}
       />
     </main>
+  );
+}
+
+// ===================== CONFIGURACIÓN DEL EXAMEN =====================
+
+const SECTION_KINDS: { kind: SectionKind; label: string }[] = [
+  { kind: "writing", label: "Writing" },
+  { kind: "listening", label: "Listening" },
+  { kind: "grammar", label: "Grammar" },
+  { kind: "reading", label: "Reading" },
+  { kind: "speaking", label: "Speaking" },
+];
+
+function ExamConfigPanel({ t }: { t: (k: string, p?: Record<string, string | number>) => string }) {
+  const [config, setConfig] = useState<ExamConfig>(DEFAULT_EXAM_CONFIG);
+  const [loaded, setLoaded] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+
+  useEffect(() => {
+    (async () => {
+      const res = await fetch("/api/admin/exam-config");
+      if (res.ok) setConfig((await res.json()).config);
+      setLoaded(true);
+    })();
+  }, []);
+
+  const setMinutes = (kind: SectionKind, value: number) => {
+    setConfig((c) => ({ ...c, sectionMinutes: { ...c.sectionMinutes, [kind]: value } }));
+    setSaved(false);
+  };
+  const setReplay = (v: boolean) => {
+    setConfig((c) => ({ ...c, allowListeningReplay: v }));
+    setSaved(false);
+  };
+
+  const save = async () => {
+    setSaving(true);
+    try {
+      const res = await fetch("/api/admin/exam-config", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(config),
+      });
+      if (res.ok) {
+        setConfig((await res.json()).config);
+        setSaved(true);
+      }
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <motion.section
+      initial={{ opacity: 0, y: 18 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="glass rounded-3xl p-6 sm:p-8 mt-6"
+    >
+      <h2 className="text-xl font-black">{t("admin.examCfgTitle")}</h2>
+      <p className="mt-1 text-sm text-slate-400">{t("admin.examCfgDesc")}</p>
+
+      <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        {SECTION_KINDS.map(({ kind, label }) => (
+          <label
+            key={kind}
+            className="flex items-center justify-between gap-3 rounded-2xl border border-white/10 bg-white/[0.03] p-4"
+          >
+            <span className="text-sm font-semibold text-slate-200">{label}</span>
+            <span className="flex items-center gap-1.5">
+              <input
+                type="number"
+                min={0}
+                max={300}
+                value={config.sectionMinutes[kind]}
+                onChange={(e) => setMinutes(kind, Number(e.target.value))}
+                className="input-dark w-20 rounded-lg px-3 py-2 text-right text-sm"
+              />
+              <span className="text-xs text-slate-500">min</span>
+            </span>
+          </label>
+        ))}
+      </div>
+
+      <label className="mt-4 flex items-center justify-between gap-3 rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+        <span className="text-sm font-semibold text-slate-200">{t("admin.allowReplay")}</span>
+        <button
+          type="button"
+          onClick={() => setReplay(!config.allowListeningReplay)}
+          className={`relative h-6 w-11 shrink-0 rounded-full transition ${
+            config.allowListeningReplay ? "bg-cyan-500" : "bg-white/15"
+          }`}
+          aria-pressed={config.allowListeningReplay}
+        >
+          <span
+            className={`absolute top-0.5 h-5 w-5 rounded-full bg-white transition-all ${
+              config.allowListeningReplay ? "left-[22px]" : "left-0.5"
+            }`}
+          />
+        </button>
+      </label>
+
+      <div className="mt-5 flex flex-wrap items-center gap-3">
+        <button
+          onClick={save}
+          disabled={saving || !loaded}
+          className="btn-primary px-6 py-3 rounded-xl font-black uppercase tracking-tight text-sm disabled:opacity-50"
+        >
+          {saving ? t("admin.saving") : t("admin.saveConfig")}
+        </button>
+        {saved && <span className="text-sm font-semibold text-emerald-300">✓ {t("admin.saved")}</span>}
+      </div>
+      <p className="mt-3 text-xs text-slate-500">{t("admin.examCfgNote")}</p>
+    </motion.section>
   );
 }
 

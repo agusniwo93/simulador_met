@@ -11,11 +11,17 @@ export default function ListenControls({
   id,
   transcript,
   labels,
+  played = false,
+  allowReplay = true,
+  onPlay,
 }: {
   player: Player;
   id: string;
   transcript: string;
-  labels: { listen: string; playing: string; loading: string };
+  labels: { listen: string; playing: string; loading: string; played?: string };
+  played?: boolean;
+  allowReplay?: boolean;
+  onPlay?: () => void;
 }) {
   const active = player.activeId === id;
   const { status, speed } = player;
@@ -27,8 +33,22 @@ export default function ListenControls({
     "flex h-8 w-8 items-center justify-center rounded-full bg-white/15 text-white transition hover:bg-white/25 active:scale-95";
 
   if (!active) {
+    // Ya reproducido y sin repetición permitida → deshabilitado.
+    if (played && !allowReplay) {
+      return (
+        <span className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-4 py-2 text-xs font-bold text-slate-400">
+          <span aria-hidden>✓</span> {labels.played ?? "Played"}
+        </span>
+      );
+    }
     return (
-      <button onClick={() => player.play(id, transcript)} className={pill}>
+      <button
+        onClick={() => {
+          onPlay?.();
+          player.play(id, transcript);
+        }}
+        className={pill}
+      >
         <span aria-hidden>▶</span> {labels.listen}
       </button>
     );

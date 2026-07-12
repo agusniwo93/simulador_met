@@ -11,8 +11,9 @@ import type {
   McqItem,
   Payment,
   RevenueStats,
+  ExamConfig,
 } from "./types";
-import { DEFAULT_THEME } from "./types";
+import { DEFAULT_THEME, DEFAULT_EXAM_CONFIG } from "./types";
 import { SEED_SECTIONS, SEED_TITLE, SEED_DURATION, SEED_ID, SEED_VERSION } from "./exam/seed-exam";
 
 // Base de datos en archivo (demo). Exámenes y resultados — sin cuentas.
@@ -25,6 +26,7 @@ interface DB {
   examResults: ExamResult[];
   payments?: Payment[];
   theme?: ThemeSettings;
+  examConfig?: ExamConfig;
 }
 
 const EMPTY_DB: DB = { exams: [], examResults: [], payments: [] };
@@ -329,6 +331,27 @@ export function saveTheme(theme: Partial<ThemeSettings>): ThemeSettings {
   return update((db) => {
     db.theme = { ...DEFAULT_THEME, ...(db.theme ?? {}), ...theme };
     return db.theme;
+  });
+}
+
+// ---------- Configuración del examen ----------
+
+export function getExamConfig(): ExamConfig {
+  const cfg = read().examConfig;
+  return {
+    sectionMinutes: { ...DEFAULT_EXAM_CONFIG.sectionMinutes, ...(cfg?.sectionMinutes ?? {}) },
+    allowListeningReplay: cfg?.allowListeningReplay ?? DEFAULT_EXAM_CONFIG.allowListeningReplay,
+  };
+}
+
+export function saveExamConfig(patch: Partial<ExamConfig>): ExamConfig {
+  return update((db) => {
+    const cur = getExamConfig();
+    db.examConfig = {
+      sectionMinutes: { ...cur.sectionMinutes, ...(patch.sectionMinutes ?? {}) },
+      allowListeningReplay: patch.allowListeningReplay ?? cur.allowListeningReplay,
+    };
+    return db.examConfig;
   });
 }
 

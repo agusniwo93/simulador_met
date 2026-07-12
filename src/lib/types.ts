@@ -144,6 +144,20 @@ export const DEFAULT_THEME: ThemeSettings = {
   accent: "#22d3ee",
 };
 
+// ---- Configuración del examen (editable desde el admin) ----
+
+export interface ExamConfig {
+  // Minutos por sección (0 = sin límite).
+  sectionMinutes: Record<SectionKind, number>;
+  // Permitir repetir el audio del Listening.
+  allowListeningReplay: boolean;
+}
+
+export const DEFAULT_EXAM_CONFIG: ExamConfig = {
+  sectionMinutes: { writing: 30, listening: 20, grammar: 15, reading: 25, speaking: 15 },
+  allowListeningReplay: false,
+};
+
 // ---- Pagos (ingresos) ----
 
 export interface Payment {
