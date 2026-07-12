@@ -1,7 +1,17 @@
 import fs from "fs";
 import path from "path";
 import { randomUUID } from "crypto";
-import type { Exam, ExamResult, Analytics, Section, SectionKind, ThemeSettings, McqItem } from "./types";
+import type {
+  Exam,
+  ExamResult,
+  Analytics,
+  Section,
+  SectionKind,
+  ThemeSettings,
+  McqItem,
+  Payment,
+  RevenueStats,
+} from "./types";
 import { DEFAULT_THEME } from "./types";
 import { SEED_SECTIONS, SEED_TITLE, SEED_DURATION, SEED_ID, SEED_VERSION } from "./exam/seed-exam";
 
@@ -13,10 +23,11 @@ export const UPLOAD_DIR = path.join(DATA_DIR, "uploads");
 interface DB {
   exams: Exam[];
   examResults: ExamResult[];
+  payments?: Payment[];
   theme?: ThemeSettings;
 }
 
-const EMPTY_DB: DB = { exams: [], examResults: [] };
+const EMPTY_DB: DB = { exams: [], examResults: [], payments: [] };
 
 function ensureDirs() {
   if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
@@ -251,6 +262,63 @@ export function getExamResult(id: string): ExamResult | undefined {
   return read().examResults.find((r) => r.id === id);
 }
 
+// Elimina un resultado (alumno que rindió el examen). Devuelve true si existía.
+export function deleteExamResult(id: string): boolean {
+  return update((db) => {
+    const before = db.examResults.length;
+    db.examResults = db.examResults.filter((r) => r.id !== id);
+    return db.examResults.length < before;
+  });
+}
+
+// ---------- Pagos (ingresos) ----------
+
+export function recordPayment(input: { amount: number; currency: string }): Payment {
+  return update((db) => {
+    const payment: Payment = {
+      id: randomUUID(),
+      amount: input.amount,
+      currency: input.currency,
+      at: new Date().toISOString(),
+    };
+    db.payments = db.payments ?? [];
+    db.payments.push(payment);
+    return payment;
+  });
+}
+
+function computeRevenue(): RevenueStats {
+  const payments = read().payments ?? [];
+  const currency = payments[0]?.currency || process.env.PAY_CURRENCY || "USD";
+  const total = payments.reduce((s, p) => s + p.amount, 0);
+
+  const now = new Date();
+  const todayKey = now.toISOString().slice(0, 10);
+  const monthKey = now.toISOString().slice(0, 7);
+  const dayAmount = (d: string) => payments.filter((p) => p.at.slice(0, 10) === d);
+  const today = dayAmount(todayKey).reduce((s, p) => s + p.amount, 0);
+  const month = payments.filter((p) => p.at.slice(0, 7) === monthKey).reduce((s, p) => s + p.amount, 0);
+
+  // Últimos 14 días.
+  const byDay: RevenueStats["byDay"] = [];
+  for (let i = 13; i >= 0; i--) {
+    const d = new Date(now.getTime() - i * 86400000).toISOString().slice(0, 10);
+    const ps = dayAmount(d);
+    byDay.push({ date: d, amount: ps.reduce((s, p) => s + p.amount, 0), count: ps.length });
+  }
+
+  // Últimos 12 meses.
+  const byMonth: RevenueStats["byMonth"] = [];
+  for (let i = 11; i >= 0; i--) {
+    const dt = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    const key = dt.toISOString().slice(0, 7);
+    const ps = payments.filter((p) => p.at.slice(0, 7) === key);
+    byMonth.push({ month: key, amount: ps.reduce((s, p) => s + p.amount, 0), count: ps.length });
+  }
+
+  return { total, currency, count: payments.length, today, month, byDay, byMonth };
+}
+
 // ---------- Tema de colores ----------
 
 export function getTheme(): ThemeSettings {
@@ -277,6 +345,7 @@ export function getAnalytics(): Analytics {
       scoreBuckets: { excellent: 0, good: 0, needsWork: 0 },
       sectionAverages: [],
       recent: [],
+      revenue: computeRevenue(),
     };
   }
 
@@ -317,7 +386,7 @@ export function getAnalytics(): Analytics {
       submittedAt: r.submittedAt,
     }));
 
-  return { totalExams: total, averageScore, scoreBuckets, sectionAverages, recent };
+  return { totalExams: total, averageScore, scoreBuckets, sectionAverages, recent, revenue: computeRevenue() };
 }
 
 // ---------- Seed ----------

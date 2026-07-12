@@ -7,8 +7,9 @@ import Background3D from "@/components/visual/Background3D";
 import LanguageToggle from "@/components/ui/LanguageToggle";
 import Dialog from "@/components/ui/Dialog";
 import { useI18n } from "@/lib/i18n/context";
-import { parseDialogue } from "@/lib/exam/dialogue";
-import { playTTS, unlockAudio, stopAudio } from "@/lib/tts/player";
+import { playTTS, unlockAudio } from "@/lib/tts/player";
+import { useListenPlayer } from "@/lib/tts/useListenPlayer";
+import ListenControls from "@/components/exam/ListenControls";
 import type { Exam, Section, McqItem } from "@/lib/types";
 
 type TFn = (path: string, params?: Record<string, string | number>) => string;
@@ -59,43 +60,17 @@ export default function ExamRunPage() {
   const [submitting, setSubmitting] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [errorOpen, setErrorOpen] = useState(false);
-  const [speakingId, setSpeakingId] = useState<string | null>(null);
+  const listen = useListenPlayer();
 
   // Refs para evitar dependencias inestables en intervalos / auto-submit.
   const submittingRef = useRef(false);
   const autoSubmitFiredRef = useRef(false);
   const submitRef = useRef<(auto: boolean) => void>(() => {});
 
-  // ¿Soporta el navegador la Web Speech API? (se calcula tras montar)
+  // ¿Soporta el navegador la Web Speech API? (respaldo del listening/speaking)
   const [ttsSupported, setTtsSupported] = useState(true);
   useEffect(() => {
     setTtsSupported(typeof window !== "undefined" && "speechSynthesis" in window);
-  }, []);
-
-  // Voces de mujer y hombre para leer el listening como una conversación. Se
-  // cargan de forma asíncrona (evento voiceschanged en algunos navegadores).
-  const voicesRef = useRef<{ female: SpeechSynthesisVoice | null; male: SpeechSynthesisVoice | null }>({
-    female: null,
-    male: null,
-  });
-  useEffect(() => {
-    if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
-    const femaleHint = /(female|woman|samantha|victoria|karen|moira|tessa|fiona|zira|susan|allison|ava|serena|kate|catherine|nicky|joana|paulina|google us english)/i;
-    const maleHint = /(\bmale\b|\bman\b|daniel|alex|fred|aaron|david|mark|oliver|thomas|arthur|george|\bguy\b|rishi|\btom\b|james|reed|rocko)/i;
-    const pick = () => {
-      const en = speechSynthesis.getVoices().filter((v) => /^en/i.test(v.lang));
-      const list = en.length ? en : speechSynthesis.getVoices();
-      if (!list.length) return;
-      const female = list.find((v) => femaleHint.test(v.name)) ?? list[0];
-      const male =
-        list.find((v) => maleHint.test(v.name) && v.name !== female.name) ??
-        list.find((v) => v.name !== female.name) ??
-        female;
-      voicesRef.current = { female, male };
-    };
-    pick();
-    speechSynthesis.addEventListener("voiceschanged", pick);
-    return () => speechSynthesis.removeEventListener("voiceschanged", pick);
   }, []);
 
   // ---------- 1) Carga del examen ----------
@@ -246,73 +221,10 @@ export default function ExamRunPage() {
     setAnswers((prev) => ({ ...prev, [taskId]: url }));
   }, []);
 
-  // ---------- Listening: voz del navegador (respaldo) ----------
-  const speakBrowser = useCallback((itemId: string, transcript: string) => {
-    if (!ttsSupported || !transcript) return;
-    try {
-      speechSynthesis.cancel();
-      const segments = parseDialogue(transcript);
-      const { female, male } = voicesRef.current;
-      const last = segments.length - 1;
-      segments.forEach((seg, i) => {
-        const u = new SpeechSynthesisUtterance(seg.text);
-        u.lang = "en-US";
-        u.rate = 0.95;
-        const voice = seg.speaker === "male" ? male : female ?? male;
-        if (voice) u.voice = voice;
-        // Diferencia el tono aunque el navegador tenga una sola voz.
-        u.pitch = seg.speaker === "male" ? 0.8 : seg.speaker === "female" ? 1.15 : 1;
-        if (i === last) {
-          u.onend = () => setSpeakingId((cur) => (cur === itemId ? null : cur));
-        }
-        u.onerror = () => setSpeakingId((cur) => (cur === itemId ? null : cur));
-        speechSynthesis.speak(u);
-      });
-      setSpeakingId(itemId);
-    } catch {
-      setSpeakingId(null);
-    }
-  }, [ttsSupported]);
-
-  // ---------- Listening: voces reales (ElevenLabs) con respaldo al navegador ----------
-  const playTokenRef = useRef(0);
-  const speak = useCallback(
-    (itemId: string, transcript: string) => {
-      if (!transcript) return;
-      unlockAudio(); // debe correr dentro del gesto (clic) para iOS
-      stopAudio();
-      if (typeof window !== "undefined" && "speechSynthesis" in window) speechSynthesis.cancel();
-      const token = ++playTokenRef.current;
-      setSpeakingId(itemId);
-      playTTS(transcript, { dialogue: true })
-        .then(() => {
-          if (playTokenRef.current === token) setSpeakingId((cur) => (cur === itemId ? null : cur));
-        })
-        .catch(() => {
-          // Si ElevenLabs no está disponible/permitido, usamos la voz del navegador.
-          if (playTokenRef.current === token) speakBrowser(itemId, transcript);
-        });
-    },
-    [speakBrowser]
-  );
-
-  // Detener cualquier locución al desmontar / cambiar de sección.
+  // Al cambiar de sección, detener el listening en curso.
   useEffect(() => {
-    return () => {
-      stopAudio();
-      if (typeof window !== "undefined" && "speechSynthesis" in window) {
-        speechSynthesis.cancel();
-      }
-    };
-  }, []);
-
-  useEffect(() => {
-    stopAudio();
-    if (typeof window !== "undefined" && "speechSynthesis" in window) {
-      speechSynthesis.cancel();
-    }
-    setSpeakingId(null);
-  }, [activeSection]);
+    listen.stop();
+  }, [activeSection, listen.stop]);
 
   // ---------- 6) Envío del examen ----------
   const submitExam = useCallback(
@@ -702,49 +614,34 @@ export default function ExamRunPage() {
                     )}
                   </div>
                   <div className="mt-5 space-y-5">
-                    {(current.items ?? []).map((item, n) => {
-                      const isSpeaking = speakingId === item.id;
-                      return (
-                        <McqCard
-                          key={item.id}
-                          item={item}
-                          number={n + 1}
-                          selected={
-                            typeof answers[item.id] === "number" ? (answers[item.id] as number) : null
-                          }
-                          onSelect={(idx) => setChoice(item.id, idx)}
-                          questionLabel={t("exam.question")}
-                          chooseLabel={t("exam.chooseOption")}
-                          hideStem={false}
-                          audio={
-                            ttsSupported && item.transcript ? (
-                              <button
-                                onClick={() => speak(item.id, item.transcript!)}
-                                className="inline-flex items-center gap-2 rounded-full bg-gradient-to-r from-cyan-500 to-indigo-600 px-4 py-2 text-xs font-bold text-white shadow-[0_8px_24px_-10px_rgba(99,102,241,0.7)] transition hover:brightness-110 active:scale-95"
-                              >
-                                {isSpeaking ? (
-                                  <>
-                                    <span className="flex items-end gap-0.5" aria-hidden>
-                                      <span className="h-2 w-0.5 animate-pulse bg-white" />
-                                      <span className="h-3 w-0.5 animate-pulse bg-white [animation-delay:120ms]" />
-                                      <span className="h-1.5 w-0.5 animate-pulse bg-white [animation-delay:240ms]" />
-                                    </span>
-                                    {t("exam.listenPlaying")}
-                                  </>
-                                ) : (
-                                  <>
-                                    <span aria-hidden>▶</span>
-                                    {answers[item.id] != null || speakingId
-                                      ? t("exam.listenReplay")
-                                      : t("exam.listenPlay")}
-                                  </>
-                                )}
-                              </button>
-                            ) : null
-                          }
-                        />
-                      );
-                    })}
+                    {(current.items ?? []).map((item, n) => (
+                      <McqCard
+                        key={item.id}
+                        item={item}
+                        number={n + 1}
+                        selected={
+                          typeof answers[item.id] === "number" ? (answers[item.id] as number) : null
+                        }
+                        onSelect={(idx) => setChoice(item.id, idx)}
+                        questionLabel={t("exam.question")}
+                        chooseLabel={t("exam.chooseOption")}
+                        hideStem={false}
+                        audio={
+                          item.transcript ? (
+                            <ListenControls
+                              player={listen}
+                              id={item.id}
+                              transcript={item.transcript}
+                              labels={{
+                                listen: t("exam.listenPlay"),
+                                playing: t("exam.listenPlaying"),
+                                loading: t("common.loading"),
+                              }}
+                            />
+                          ) : null
+                        }
+                      />
+                    ))}
                   </div>
                 </div>
               )}

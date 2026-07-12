@@ -75,10 +75,13 @@ export function stopAudio(): void {
   }
 }
 
-// Genera (servidor) y reproduce el audio del texto. Resuelve al terminar la
-// reproducción. Lanza si el servidor no puede generar (para caer al fallback).
-export async function playTTS(text: string, opts?: { dialogue?: boolean }): Promise<void> {
-  const dialogue = opts?.dialogue !== false;
+// Elemento <audio> compartido (para controles: pausa/reanudar/velocidad).
+export function getAudioEl(): HTMLAudioElement {
+  return getAudio();
+}
+
+// Pide (servidor) el audio del texto y devuelve su objectURL, con caché.
+export async function fetchTts(text: string, dialogue = true): Promise<string> {
   const key = (dialogue ? "d:" : "s:") + text;
   let url = cache.get(key);
   if (!url) {
@@ -92,12 +95,18 @@ export async function playTTS(text: string, opts?: { dialogue?: boolean }): Prom
     url = URL.createObjectURL(blob);
     cache.set(key, url);
   }
+  return url;
+}
 
+// Genera (servidor) y reproduce el audio del texto. Resuelve al terminar la
+// reproducción. Lanza si el servidor no puede generar (para caer al fallback).
+export async function playTTS(text: string, opts?: { dialogue?: boolean }): Promise<void> {
+  const url = await fetchTts(text, opts?.dialogue !== false);
   const a = getAudio();
   return new Promise<void>((resolve, reject) => {
     a.onended = () => resolve();
     a.onerror = () => reject(new Error("audio playback error"));
-    a.src = url as string;
+    a.src = url;
     a.currentTime = 0;
     const p = a.play();
     if (p && typeof p.catch === "function") p.catch(reject);
@@ -130,7 +139,7 @@ if (typeof window !== "undefined" && "speechSynthesis" in window) {
 
 // Lee un guion como conversación con la voz del navegador: distinta voz (y tono)
 // para mujer/hombre según "Woman:"/"Man:", SIN pronunciar la etiqueta.
-export function speakDialogueBrowser(transcript: string, onEnd?: () => void): void {
+export function speakDialogueBrowser(transcript: string, onEnd?: () => void, speed = 1): void {
   if (typeof window === "undefined" || !("speechSynthesis" in window) || !transcript) {
     onEnd?.();
     return;
@@ -143,7 +152,7 @@ export function speakDialogueBrowser(transcript: string, onEnd?: () => void): vo
     segs.forEach((seg, i) => {
       const u = new SpeechSynthesisUtterance(seg.text);
       u.lang = "en-US";
-      u.rate = 0.95;
+      u.rate = 0.95 * speed;
       const v = seg.speaker === "male" ? voices?.male : voices?.female ?? voices?.male;
       if (v) u.voice = v;
       u.pitch = seg.speaker === "male" ? 0.8 : seg.speaker === "female" ? 1.15 : 1;

@@ -144,6 +144,25 @@ export const DEFAULT_THEME: ThemeSettings = {
   accent: "#22d3ee",
 };
 
+// ---- Pagos (ingresos) ----
+
+export interface Payment {
+  id: string;
+  amount: number;
+  currency: string;
+  at: string; // ISO
+}
+
+export interface RevenueStats {
+  total: number;
+  currency: string;
+  count: number;
+  today: number;
+  month: number;
+  byDay: { date: string; amount: number; count: number }[]; // últimos 14 días
+  byMonth: { month: string; amount: number; count: number }[]; // últimos 12 meses
+}
+
 // ---- Analítica (panel admin) ----
 
 export interface Analytics {
@@ -152,4 +171,5 @@ export interface Analytics {
   scoreBuckets: { excellent: number; good: number; needsWork: number };
   sectionAverages: { kind: SectionKind; title: string; averageScore: number; count: number }[];
   recent: { id: string; studentName: string; overallScore: number; submittedAt: string }[];
+  revenue: RevenueStats;
 }

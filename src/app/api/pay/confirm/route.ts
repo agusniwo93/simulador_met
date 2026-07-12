@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import crypto from "crypto";
 import { ACCESS_COOKIE, signAccessPass, accessCookieOptions } from "@/lib/auth/access";
+import { recordPayment } from "@/lib/db";
 
 // IziPay (Krypton) reenvía el resultado del pago a esta ruta (kr-post-url-success).
 // SEGURIDAD: verificamos la FIRMA HMAC-SHA256 y que el pago esté realmente PAGADO
@@ -62,8 +63,16 @@ export async function POST(req: Request) {
     return fail();
   }
 
-  // 4. Pago verificado → otorgar el pase de acceso.
+  // 4. Pago verificado → registrar el ingreso y otorgar el pase de acceso.
   try {
+    try {
+      recordPayment({
+        amount: Number(process.env.PAY_AMOUNT) || 15,
+        currency: process.env.PAY_CURRENCY || "USD",
+      });
+    } catch (e) {
+      console.error("No se pudo registrar el pago (ingreso):", e);
+    }
     const pass = await signAccessPass();
     const res = NextResponse.redirect(`${origin}/exam`, { status: 303 });
     res.cookies.set(ACCESS_COOKIE, pass, accessCookieOptions);

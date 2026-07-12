@@ -1,9 +1,10 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Background3D from "@/components/visual/Background3D";
-import { speakDialogue, stopAudio } from "@/lib/tts/player";
+import { useListenPlayer } from "@/lib/tts/useListenPlayer";
+import ListenControls from "@/components/exam/ListenControls";
 import type { Exam, Section, McqItem } from "@/lib/types";
 
 const LETTERS = ["A", "B", "C", "D", "E", "F"];
@@ -16,7 +17,7 @@ export default function ExamPreviewPage() {
   const [exam, setExam] = useState<Exam | null>(null);
   const [loading, setLoading] = useState(true);
   const [active, setActive] = useState(0);
-  const [speakingId, setSpeakingId] = useState<string | null>(null);
+  const listen = useListenPlayer();
 
   useEffect(() => {
     (async () => {
@@ -30,27 +31,10 @@ export default function ExamPreviewPage() {
     })();
   }, [id, router]);
 
-  const speak = useCallback((itemId: string, text: string) => {
-    if (!text) return;
-    setSpeakingId(itemId);
-    // Misma reproducción que el examen real: ElevenLabs (dos voces) con respaldo
-    // a la voz del navegador con voces de mujer/hombre.
-    speakDialogue(text, () => setSpeakingId((c) => (c === itemId ? null : c)));
-  }, []);
-
+  // Al cambiar de sección: detener el listening en curso.
   useEffect(() => {
-    return () => {
-      stopAudio();
-      if (typeof window !== "undefined" && "speechSynthesis" in window) speechSynthesis.cancel();
-    };
-  }, []);
-
-  // Al cambiar de sección: detener cualquier locución.
-  useEffect(() => {
-    stopAudio();
-    if (typeof window !== "undefined" && "speechSynthesis" in window) speechSynthesis.cancel();
-    setSpeakingId(null);
-  }, [active]);
+    listen.stop();
+  }, [active, listen.stop]);
 
   if (loading) {
     return (
@@ -145,7 +129,7 @@ export default function ExamPreviewPage() {
 
       {/* Cuerpo de la sección */}
       <div className="mx-auto max-w-4xl px-4 py-6 sm:px-6">
-        {current && <SectionPreview section={current} speak={speak} speakingId={speakingId} />}
+        {current && <SectionPreview section={current} listen={listen} />}
 
         {/* Navegación */}
         <div className="mt-8 flex items-center justify-between gap-3">
@@ -171,16 +155,14 @@ export default function ExamPreviewPage() {
 
 function SectionPreview({
   section,
-  speak,
-  speakingId,
+  listen,
 }: {
   section: Section;
-  speak: (id: string, text: string) => void;
-  speakingId: string | null;
+  listen: ReturnType<typeof useListenPlayer>;
 }) {
   return (
     <section>
-      <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-cyan-400/80">Sección</p>
+      <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-cyan-400/80">Section</p>
       <h2 className="mt-1 text-xl font-bold sm:text-2xl">{section.title}</h2>
       {section.intro && <p className="mt-2 text-sm leading-relaxed text-slate-400">{section.intro}</p>}
 
@@ -224,12 +206,12 @@ function SectionPreview({
               number={n + 1}
               audio={
                 item.transcript ? (
-                  <button
-                    onClick={() => speak(item.id, item.transcript!)}
-                    className="inline-flex items-center gap-2 rounded-full bg-gradient-to-r from-cyan-500 to-indigo-600 px-4 py-2 text-xs font-bold text-white transition hover:brightness-110"
-                  >
-                    {speakingId === item.id ? "♪ Playing…" : "▶ Listen"}
-                  </button>
+                  <ListenControls
+                    player={listen}
+                    id={item.id}
+                    transcript={item.transcript}
+                    labels={{ listen: "Listen", playing: "Play", loading: "Loading…" }}
+                  />
                 ) : null
               }
               transcript={item.transcript}
@@ -245,7 +227,7 @@ function SectionPreview({
             <div key={p.id} className="space-y-4">
               <div className="glass rounded-3xl p-5 sm:p-6">
                 <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-cyan-400/80">
-                  Texto de lectura
+                  Reading passage
                 </p>
                 {p.title && <h3 className="mt-1 text-lg font-bold">{p.title}</h3>}
                 {p.imageUrl && (

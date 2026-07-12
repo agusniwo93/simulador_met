@@ -127,7 +127,7 @@ export default function AdminPage() {
         </div>
 
         {/* ====== ANALÍTICAS ====== */}
-        <AnalyticsPanel analytics={analytics} t={t} />
+        <AnalyticsPanel analytics={analytics} t={t} onChange={loadData} />
 
         {/* ====== TEMA DE COLORES ====== */}
         <ThemePanel theme={theme} onSaved={setTheme} />
@@ -409,11 +409,15 @@ function ThemePanel({
 function AnalyticsPanel({
   analytics,
   t,
+  onChange,
 }: {
   analytics: Analytics | null;
   t: (k: string, p?: Record<string, string | number>) => string;
+  onChange: () => void;
 }) {
-  if (!analytics || analytics.totalExams === 0) {
+  const [deleting, setDeleting] = useState<string | null>(null);
+
+  if (!analytics) {
     return (
       <section className="glass rounded-3xl p-6 sm:p-8 mt-8">
         <h2 className="text-xl font-black mb-2">{t("admin.analyticsTitle")}</h2>
@@ -422,11 +426,25 @@ function AnalyticsPanel({
     );
   }
 
-  const { totalExams, averageScore, scoreBuckets, sectionAverages, recent } = analytics;
+  const { totalExams, averageScore, scoreBuckets, sectionAverages, recent, revenue } = analytics;
   const distTotal = scoreBuckets.excellent + scoreBuckets.good + scoreBuckets.needsWork || 1;
 
   const scoreColor = (s: number) =>
     s >= 80 ? "text-emerald-400" : s >= 60 ? "text-amber-400" : "text-rose-400";
+
+  const money = (n: number) => `${revenue.currency} ${n.toLocaleString()}`;
+  const maxDay = Math.max(1, ...revenue.byDay.map((d) => d.amount));
+
+  const del = async (id: string) => {
+    if (!window.confirm(t("admin.confirmDeleteStudent"))) return;
+    setDeleting(id);
+    try {
+      await fetch(`/api/admin/results/${id}`, { method: "DELETE" });
+      onChange();
+    } finally {
+      setDeleting(null);
+    }
+  };
 
   return (
     <motion.section
@@ -436,6 +454,51 @@ function AnalyticsPanel({
     >
       <h2 className="text-xl font-black mb-6">{t("admin.analyticsTitle")}</h2>
 
+      {/* ===== INGRESOS ===== */}
+      <div className="mb-8">
+        <h3 className="text-sm font-bold uppercase tracking-wider text-slate-500 mb-3">
+          {t("admin.revenue")}
+        </h3>
+        <div className="grid grid-cols-3 gap-3 sm:gap-5">
+          <div className="bg-emerald-500/10 rounded-2xl p-4 sm:p-6 border border-emerald-400/20">
+            <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-300/80">
+              {t("admin.revenueTotal")}
+            </span>
+            <div className="mt-1 text-2xl sm:text-3xl font-black text-emerald-400">{money(revenue.total)}</div>
+          </div>
+          <div className="bg-white/[0.03] rounded-2xl p-4 sm:p-6 border border-white/5">
+            <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
+              {t("admin.revenueMonth")}
+            </span>
+            <div className="mt-1 text-2xl sm:text-3xl font-black text-slate-100">{money(revenue.month)}</div>
+          </div>
+          <div className="bg-white/[0.03] rounded-2xl p-4 sm:p-6 border border-white/5">
+            <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
+              {t("admin.revenueToday")}
+            </span>
+            <div className="mt-1 text-2xl sm:text-3xl font-black text-slate-100">{money(revenue.today)}</div>
+          </div>
+        </div>
+        {/* Barras: ingresos por día (últimos 14) */}
+        <div className="mt-5 flex h-24 items-end gap-1.5">
+          {revenue.byDay.map((d) => (
+            <div
+              key={d.date}
+              className="group relative flex-1 rounded-t bg-gradient-to-t from-cyan-500 to-indigo-500"
+              style={{ height: `${Math.max(3, (d.amount / maxDay) * 100)}%` }}
+              title={`${d.date}: ${money(d.amount)} (${d.count})`}
+            />
+          ))}
+        </div>
+        <p className="mt-2 text-xs text-slate-500">
+          {t("admin.revenueLast14")} · {revenue.count} {t("admin.payments")}
+        </p>
+      </div>
+
+      {totalExams === 0 ? (
+        <p className="text-slate-400">{t("admin.noExamsYet")}</p>
+      ) : (
+        <>
       {/* KPIs */}
       <div className="grid sm:grid-cols-2 gap-5">
         <div className="bg-white/[0.03] rounded-2xl p-5 sm:p-6 border border-white/5">
@@ -516,7 +579,7 @@ function AnalyticsPanel({
                   <td className="py-2.5 pr-4 font-semibold text-slate-200">{r.studentName}</td>
                   <td className={`py-2.5 pr-4 font-black ${scoreColor(r.overallScore)}`}>{r.overallScore}/100</td>
                   <td className="py-2.5 pr-4 text-slate-400">{new Date(r.submittedAt).toLocaleString()}</td>
-                  <td className="py-2.5 text-right">
+                  <td className="py-2.5 text-right whitespace-nowrap">
                     <a
                       href={`/results/${r.id}`}
                       target="_blank"
@@ -525,6 +588,13 @@ function AnalyticsPanel({
                     >
                       {t("admin.viewResult")}
                     </a>
+                    <button
+                      onClick={() => del(r.id)}
+                      disabled={deleting === r.id}
+                      className="ml-3 font-bold text-rose-400 hover:text-rose-300 disabled:opacity-50"
+                    >
+                      {t("admin.delete")}
+                    </button>
                   </td>
                 </tr>
               ))}
@@ -532,6 +602,8 @@ function AnalyticsPanel({
           </table>
         </div>
       </div>
+        </>
+      )}
     </motion.section>
   );
 }
