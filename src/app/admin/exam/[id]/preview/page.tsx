@@ -195,14 +195,14 @@ function SectionPreview({
         <div className="mt-6 space-y-5">
           {(section.writingTasks ?? []).map((task, n) => (
             <div key={task.id} className="glass rounded-3xl p-5 sm:p-6">
-              <h3 className="text-sm font-bold uppercase tracking-wide text-slate-300">Tarea {n + 1}</h3>
+              <h3 className="text-sm font-bold uppercase tracking-wide text-slate-300">Task {n + 1}</h3>
               <div className="mt-3 rounded-2xl border border-cyan-400/20 bg-cyan-400/5 p-4">
                 <p className="whitespace-pre-line text-sm leading-relaxed text-slate-200">{task.prompt}</p>
               </div>
               <div className="input-dark mt-4 min-h-[120px] rounded-2xl px-4 py-3 text-sm text-slate-500">
-                (área de respuesta del alumno)
+                (student's answer area)
               </div>
-              <p className="mt-2 text-xs text-slate-500">Mínimo {task.minWords} palabras</p>
+              <p className="mt-2 text-xs text-slate-500">Min. {task.minWords} words</p>
               {task.feedbackGuide && (
                 <p className="mt-1 text-xs text-emerald-300/80">Guía: {task.feedbackGuide}</p>
               )}
@@ -283,7 +283,7 @@ function SectionPreview({
         <div className="mt-6 space-y-5">
           {(section.speakingTasks ?? []).map((task, n) => (
             <div key={task.id} className="glass rounded-3xl p-5 sm:p-6">
-              <h3 className="text-sm font-bold uppercase tracking-wide text-slate-300">Tarea {n + 1}</h3>
+              <h3 className="text-sm font-bold uppercase tracking-wide text-slate-300">Task {n + 1}</h3>
               <div className="mt-3 rounded-2xl border border-cyan-400/20 bg-cyan-400/5 p-4">
                 <p className="whitespace-pre-line text-sm leading-relaxed text-slate-200">{task.prompt}</p>
               </div>
@@ -296,7 +296,7 @@ function SectionPreview({
                 />
               )}
               <p className="mt-3 inline-flex items-center gap-2 rounded-full bg-white/5 px-4 py-2 text-xs font-bold text-slate-300">
-                🎙️ El alumno graba su respuesta en voz
+                🎙️ The student records a voice answer
               </p>
             </div>
           ))}

@@ -1,10 +1,11 @@
 import { NextResponse } from "next/server";
 import fs from "fs";
 import path from "path";
+import { randomUUID } from "crypto";
 import { cookies } from "next/headers";
 import { ADMIN_COOKIE, hasAdminSession } from "@/lib/auth/admin-session";
 import { createExam, UPLOAD_DIR } from "@/lib/db";
-import { extractPdfText, parseExam } from "@/lib/exam/pdf-template";
+import { extractPdfText, extractPdfImages, parseExam, type ImagesByPage } from "@/lib/exam/pdf-template";
 
 export async function POST(req: Request) {
   const store = await cookies();
@@ -26,13 +27,27 @@ export async function POST(req: Request) {
   const isTxt = (file.name || "").toLowerCase().endsWith(".txt") || file.type === "text/plain";
 
   let text = "";
+  const imagesByPage: ImagesByPage = {};
   try {
-    text = isTxt ? buffer.toString("utf-8") : await extractPdfText(buffer);
+    if (isTxt) {
+      text = buffer.toString("utf-8");
+    } else {
+      text = await extractPdfText(buffer);
+      // Extraemos las imágenes del PDF (anuncios de Reading, foto de Speaking) y
+      // las guardamos como archivos servibles, agrupadas por página.
+      if (!fs.existsSync(UPLOAD_DIR)) fs.mkdirSync(UPLOAD_DIR, { recursive: true });
+      const images = await extractPdfImages(buffer).catch(() => []);
+      for (const img of images) {
+        const name = `img-${Date.now()}-${randomUUID().slice(0, 8)}.${img.ext}`;
+        fs.writeFileSync(path.join(UPLOAD_DIR, name), img.buffer);
+        (imagesByPage[img.page] ||= []).push(`/api/media/${name}`);
+      }
+    }
   } catch {
     return NextResponse.json({ error: "parseError" }, { status: 422 });
   }
 
-  const { title, sections } = parseExam(text);
+  const { title, sections } = parseExam(text, imagesByPage);
   if (sections.length === 0) {
     return NextResponse.json({ error: "parseError" }, { status: 422 });
   }

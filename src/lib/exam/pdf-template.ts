@@ -28,20 +28,71 @@ export async function extractPdfText(buffer: Buffer): Promise<string> {
 //  secciones por su encabezado y arma un examen multi-sección completo.
 // ========================================================================
 
-const clean = (s: string): string => s.replace(/\s+/g, " ").trim();
+// Quita centinelas de página y normaliza espacios.
+const clean = (s: string): string => s.replace(/@@P\d+@@/g, " ").replace(/\s+/g, " ").trim();
 
 function normalizeExamText(text: string): string {
   return text
-    .replace(/--\s*\d+\s*of\s*\d+\s*--/gi, "\n") // marcadores de página "-- 1 of 30 --"
+    .replace(/--\s*(\d+)\s*of\s*\d+\s*--/gi, "\n@@P$1@@\n") // página → centinela @@Pn@@
     .replace(/�/g, " ") // carácter de reemplazo (checkbox del PDF)
     .replace(/\r/g, "")
     .replace(/[\t ]+/g, " ")
     .replace(/[ ]{2,}/g, " ");
 }
 
+// Nº de página de un desplazamiento dentro de una sección (cuenta los centinelas
+// @@Pn@@ que hay antes, sumados a la página donde arranca la sección).
+function pageInContent(content: string, localOffset: number, startPage: number): number {
+  const re = /@@P\d+@@/g;
+  let count = 0;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(content)) && m.index < localOffset) count++;
+  return startPage + count;
+}
+
+export interface PdfImage {
+  page: number;
+  buffer: Buffer;
+  ext: string;
+}
+
+// Imágenes del examen ya guardadas y servibles, agrupadas por nº de página.
+export type ImagesByPage = Record<number, string[]>;
+
+// Extrae las imágenes embebidas del PDF con su nº de página.
+export async function extractPdfImages(buffer: Buffer): Promise<PdfImage[]> {
+  const { PDFParse } = await import("pdf-parse");
+  const parser = new PDFParse({ data: new Uint8Array(buffer) });
+  try {
+    const res = (await parser.getImage()) as {
+      pages?: { pageNumber?: number; images?: { dataUrl?: string }[] }[];
+    };
+    const out: PdfImage[] = [];
+    (res.pages || []).forEach((p, i) => {
+      const page = p.pageNumber ?? i + 1;
+      for (const img of p.images || []) {
+        const mm = /^data:image\/(\w+);base64,(.+)$/.exec(img.dataUrl || "");
+        if (!mm) continue;
+        const ext = mm[1].toLowerCase() === "jpg" ? "jpeg" : mm[1].toLowerCase();
+        out.push({ page, buffer: Buffer.from(mm[2], "base64"), ext });
+      }
+    });
+    return out;
+  } catch {
+    return [];
+  } finally {
+    await parser.destroy();
+  }
+}
+
 type SectionKindStr = "WRITING" | "LISTENING" | "GRAMMAR" | "READING" | "SPEAKING";
 
-function splitExamSections(text: string): { title: string; sections: Record<string, string> } {
+interface SectionSlice {
+  content: string;
+  startPage: number;
+}
+
+function splitExamSections(text: string): { title: string; sections: Record<string, SectionSlice> } {
   const re = /^\s*(WRITING|LISTENING|GRAMMAR|READING|SPEAKING)\s*$/gim;
   const marks: { kind: SectionKindStr; start: number; end: number }[] = [];
   let m: RegExpExecArray | null;
@@ -51,10 +102,18 @@ function splitExamSections(text: string): { title: string; sections: Record<stri
   const head = marks.length ? text.slice(0, marks[0].start) : text;
   const title = head.split("\n").map((s) => s.trim()).filter(Boolean)[0] || "Imported exam";
 
-  const sections: Record<string, string> = {};
+  // Índices de los centinelas para calcular la página de inicio de cada sección.
+  const sentinels = [...text.matchAll(/@@P\d+@@/g)].map((x) => x.index as number);
+  const pageAt = (off: number) => sentinels.filter((i) => i < off).length + 1;
+
+  const sections: Record<string, SectionSlice> = {};
   for (let i = 0; i < marks.length; i++) {
     const content = text.slice(marks[i].end, i + 1 < marks.length ? marks[i + 1].start : text.length);
-    sections[marks[i].kind] = (sections[marks[i].kind] || "") + "\n" + content;
+    if (!sections[marks[i].kind]) {
+      sections[marks[i].kind] = { content, startPage: pageAt(marks[i].end) };
+    } else {
+      sections[marks[i].kind].content += "\n" + content;
+    }
   }
   return { title, sections };
 }
@@ -84,7 +143,11 @@ function parseListeningSection(content: string): McqItem[] {
     const qi = b.search(/Question\s*:/i);
     const ai = b.search(/Answer\s*:/i);
     if (qi < 0 || ai < 0) return;
-    const transcript = b.slice(0, qi).replace(/PARTE\s*\d+/gi, "").trim();
+    const transcript = b
+      .slice(0, qi)
+      .replace(/PARTE\s*\d+/gi, "")
+      .replace(/\n?@@P\d+@@\n?/g, "\n")
+      .trim();
     const stem = clean(b.slice(qi, ai).replace(/Question\s*:/i, ""));
     const correct = clean(b.slice(ai).replace(/Answer\s*:/i, "").split("\n")[0]).replace(
       /^[^A-Za-z0-9¿¡"']+/,
@@ -116,26 +179,82 @@ function parseGrammarSection(content: string): McqItem[] {
   return items;
 }
 
-function parseReadingSection(content: string): ReadingPassage[] {
-  const re = /(Text|PACK)\s*\d+/gi;
-  const marks: { type: string; start: number; end: number }[] = [];
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(content))) {
-    marks.push({ type: m[1].toUpperCase(), start: m.index, end: re.lastIndex });
+const isOpt = (l: string) => /^[A-D][.)]\s/.test(l);
+const isAns = (l: string) => /^Answer(\s*key)?\s*:/i.test(l);
+
+// Extrae preguntas MCQ de un bloque de líneas de Reading a partir de startIdx.
+function parseReadingQuestions(lines: string[], startIdx: number, idPrefix: string): McqItem[] {
+  const items: McqItem[] = [];
+  let j = startIdx;
+  let qn = 0;
+  while (j < lines.length) {
+    const stemLines: string[] = [];
+    while (j < lines.length && !isOpt(lines[j])) {
+      if (isAns(lines[j])) break;
+      stemLines.push(lines[j]);
+      j++;
+    }
+    const options: string[] = [];
+    for (const L of ["A", "B", "C", "D"]) {
+      if (j < lines.length && new RegExp(`^${L}[.)]\\s`).test(lines[j])) {
+        options.push(lines[j].replace(/^[A-D][.)]\s*/, "").trim());
+        j++;
+      }
+    }
+    let correctIndex = 0;
+    if (j < lines.length && isAns(lines[j])) {
+      const mm = lines[j].match(/Answer(?:\s*key)?\s*:\s*([A-D])/i);
+      if (mm) correctIndex = Math.max(0, "ABCD".indexOf(mm[1].toUpperCase()));
+      j++;
+    }
+    const stem = clean(stemLines.join(" ").replace(/^\d+\.\s*/, ""));
+    if (stem && options.length >= 2) {
+      items.push({ id: `${idPrefix}_${++qn}`, stem, options, correctIndex });
+    } else if (!stem && !options.length) {
+      j++; // salvavidas anti-bucle
+    }
   }
-  const isOpt = (l: string) => /^[A-D][.)]\s/.test(l);
-  const isAns = (l: string) => /^Answer(\s*key)?\s*:/i.test(l);
+  return items;
+}
+
+function parseReadingSection(
+  content: string,
+  startPage: number,
+  imagesByPage: ImagesByPage
+): ReadingPassage[] {
+  const marks = [...content.matchAll(/(Text|PACK)\s*\d+/gi)].map((m) => ({
+    type: m[1].toUpperCase(),
+    start: m.index as number,
+    end: (m.index as number) + m[0].length,
+  }));
   const passages: ReadingPassage[] = [];
 
   for (let i = 0; i < marks.length; i++) {
-    if (marks[i].type !== "TEXT") continue; // PACK = preguntas por imagen: se omiten
     const block = content.slice(marks[i].end, i + 1 < marks.length ? marks[i + 1].start : content.length);
-    const lines = block.split("\n").map((l) => l.trim()).filter(Boolean);
-    if (!lines.length) continue;
-    const title = lines[0];
+    const page = pageInContent(content, marks[i].start, startPage);
 
-    // Separar el pasaje de las preguntas: el pasaje va hasta la primera línea
-    // numerada ("1.") o una pregunta ("…?") seguida de opciones.
+    // PACK = preguntas basadas en anuncios (una imagen por página). Se divide en
+    // sub-bloques por página y se asocia a cada uno el anuncio de esa página.
+    if (marks[i].type === "PACK") {
+      block.split(/@@P\d+@@/).forEach((chunk, ci) => {
+        const chunkLines = chunk.split("\n").map((l) => l.trim()).filter(Boolean);
+        const items = parseReadingQuestions(chunkLines, 0, `r${passages.length + 1}`);
+        if (!items.length) return; // sin preguntas, no consumir imagen
+        const imageUrl = imagesByPage[page + ci]?.shift();
+        if (imageUrl) passages.push({ id: `p${passages.length + 1}`, imageUrl, items });
+      });
+      continue;
+    }
+
+    const lines = block
+      .split("\n")
+      .map((l) => l.replace(/@@P\d+@@/g, "").trim())
+      .filter(Boolean);
+    if (!lines.length) continue;
+    const idPrefix = `r${passages.length + 1}`;
+
+    // Text = pasaje con título + texto + preguntas.
+    const title = lines[0];
     let j = 1;
     const passageLines: string[] = [];
     while (j < lines.length) {
@@ -145,37 +264,7 @@ function parseReadingSection(content: string): ReadingPassage[] {
       passageLines.push(lines[j]);
       j++;
     }
-
-    const items: McqItem[] = [];
-    let qn = 0;
-    while (j < lines.length) {
-      const stemLines: string[] = [];
-      while (j < lines.length && !isOpt(lines[j])) {
-        if (isAns(lines[j])) break;
-        stemLines.push(lines[j]);
-        j++;
-      }
-      const options: string[] = [];
-      for (const L of ["A", "B", "C", "D"]) {
-        if (j < lines.length && new RegExp(`^${L}[.)]\\s`).test(lines[j])) {
-          options.push(lines[j].replace(/^[A-D][.)]\s*/, "").trim());
-          j++;
-        }
-      }
-      let correctIndex = 0;
-      if (j < lines.length && isAns(lines[j])) {
-        const mm = lines[j].match(/Answer(?:\s*key)?\s*:\s*([A-D])/i);
-        if (mm) correctIndex = Math.max(0, "ABCD".indexOf(mm[1].toUpperCase()));
-        j++;
-      }
-      const stem = clean(stemLines.join(" ").replace(/^\d+\.\s*/, ""));
-      if (stem && options.length >= 2) {
-        items.push({ id: `r${passages.length + 1}_${++qn}`, stem, options, correctIndex });
-      } else if (!stem && !options.length) {
-        j++; // salvavidas anti-bucle
-      }
-    }
-
+    const items = parseReadingQuestions(lines, j, idPrefix);
     if (items.length) {
       passages.push({ id: `p${passages.length + 1}`, title, text: passageLines.join("\n"), items });
     }
@@ -183,12 +272,25 @@ function parseReadingSection(content: string): ReadingPassage[] {
   return passages;
 }
 
-function parseSpeakingSection(content: string): SpeakingTask[] {
-  return content
-    .split(/Task\s*\d+/i)
-    .slice(1)
-    .map((b, i) => ({ id: `sp${i + 1}`, prompt: clean(b) }))
-    .filter((t) => t.prompt);
+function parseSpeakingSection(
+  content: string,
+  startPage: number,
+  imagesByPage: ImagesByPage
+): SpeakingTask[] {
+  const marks = [...content.matchAll(/Task\s*\d+/gi)].map((m) => ({
+    start: m.index as number,
+    end: (m.index as number) + m[0].length,
+  }));
+  const tasks: SpeakingTask[] = [];
+  for (let i = 0; i < marks.length; i++) {
+    const block = content.slice(marks[i].end, i + 1 < marks.length ? marks[i + 1].start : content.length);
+    const prompt = clean(block);
+    if (!prompt) continue;
+    const page = pageInContent(content, marks[i].start, startPage);
+    const imageUrl = imagesByPage[page]?.shift();
+    tasks.push({ id: `sp${tasks.length + 1}`, prompt, ...(imageUrl ? { imageUrl } : {}) });
+  }
+  return tasks;
 }
 
 export interface ParsedExam {
@@ -197,30 +299,35 @@ export interface ParsedExam {
 }
 
 // Parsea el texto completo de un simulador en su formato natural y devuelve las
-// secciones que se hayan podido reconocer.
-export function parseExam(rawText: string): ParsedExam {
+// secciones reconocidas. `imagesByPage` asocia las imágenes del PDF a Reading
+// (anuncios) y Speaking (foto) por su nº de página.
+export function parseExam(rawText: string, imagesByPage: ImagesByPage = {}): ParsedExam {
+  // Clonamos para poder consumir las imágenes (shift) sin mutar el original.
+  const images: ImagesByPage = {};
+  for (const [k, v] of Object.entries(imagesByPage)) images[Number(k)] = [...v];
+
   const text = normalizeExamText(rawText);
   const { title, sections: raw } = splitExamSections(text);
   const sections: Section[] = [];
 
   if (raw.WRITING) {
-    const writingTasks = parseWritingSection(raw.WRITING);
+    const writingTasks = parseWritingSection(raw.WRITING.content);
     if (writingTasks.length) sections.push({ kind: "writing", title: "Writing", writingTasks });
   }
   if (raw.LISTENING) {
-    const items = parseListeningSection(raw.LISTENING);
+    const items = parseListeningSection(raw.LISTENING.content);
     if (items.length) sections.push({ kind: "listening", title: "Listening", items });
   }
   if (raw.GRAMMAR) {
-    const items = parseGrammarSection(raw.GRAMMAR);
+    const items = parseGrammarSection(raw.GRAMMAR.content);
     if (items.length) sections.push({ kind: "grammar", title: "Grammar", items });
   }
   if (raw.READING) {
-    const passages = parseReadingSection(raw.READING);
+    const passages = parseReadingSection(raw.READING.content, raw.READING.startPage, images);
     if (passages.length) sections.push({ kind: "reading", title: "Reading", passages });
   }
   if (raw.SPEAKING) {
-    const speakingTasks = parseSpeakingSection(raw.SPEAKING);
+    const speakingTasks = parseSpeakingSection(raw.SPEAKING.content, raw.SPEAKING.startPage, images);
     if (speakingTasks.length) sections.push({ kind: "speaking", title: "Speaking", speakingTasks });
   }
 
