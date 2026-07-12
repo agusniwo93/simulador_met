@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import Background3D from "@/components/visual/Background3D";
+import Dialog from "@/components/ui/Dialog";
 import { useT } from "@/lib/i18n/context";
 import type { Exam, Analytics, ThemeSettings } from "@/lib/types";
 import { DEFAULT_THEME } from "@/lib/types";
@@ -22,6 +23,8 @@ export default function AdminPage() {
   const [file, setFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
   const [banner, setBanner] = useState<Banner>(null);
+  const [confirmExam, setConfirmExam] = useState<Exam | null>(null);
+  const [removingExam, setRemovingExam] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const loadData = useCallback(async () => {
@@ -79,9 +82,16 @@ export default function AdminPage() {
     }
   };
 
-  const remove = async (id: string) => {
-    await fetch(`/api/admin/sets/${id}`, { method: "DELETE" });
-    await loadData();
+  const doRemoveExam = async () => {
+    if (!confirmExam) return;
+    setRemovingExam(true);
+    try {
+      await fetch(`/api/admin/sets/${confirmExam.id}`, { method: "DELETE" });
+      await loadData();
+      setConfirmExam(null);
+    } finally {
+      setRemovingExam(false);
+    }
   };
 
   const createExam = async () => {
@@ -241,7 +251,7 @@ export default function AdminPage() {
                       {t("admin.edit")}
                     </button>
                     <button
-                      onClick={() => remove(e.id)}
+                      onClick={() => setConfirmExam(e)}
                       className="text-rose-400 hover:text-rose-300 font-bold text-sm"
                     >
                       {t("admin.delete")}
@@ -253,6 +263,20 @@ export default function AdminPage() {
           )}
         </section>
       </div>
+
+      {/* Confirmar borrado de examen (modal propio, no confirm del navegador) */}
+      <Dialog
+        open={!!confirmExam}
+        onClose={() => !removingExam && setConfirmExam(null)}
+        icon="🗑️"
+        tone="danger"
+        loading={removingExam}
+        title={t("admin.confirmDeleteExamTitle")}
+        description={confirmExam ? t("admin.confirmDeleteExam", { title: confirmExam.title }) : ""}
+        confirmLabel={t("admin.delete")}
+        cancelLabel={t("common.cancel")}
+        onConfirm={doRemoveExam}
+      />
     </main>
   );
 }
@@ -415,7 +439,8 @@ function AnalyticsPanel({
   t: (k: string, p?: Record<string, string | number>) => string;
   onChange: () => void;
 }) {
-  const [deleting, setDeleting] = useState<string | null>(null);
+  const [confirmDel, setConfirmDel] = useState<{ id: string; name: string } | null>(null);
+  const [deletingDel, setDeletingDel] = useState(false);
 
   if (!analytics) {
     return (
@@ -435,14 +460,15 @@ function AnalyticsPanel({
   const money = (n: number) => `${revenue.currency} ${n.toLocaleString()}`;
   const maxDay = Math.max(1, ...revenue.byDay.map((d) => d.amount));
 
-  const del = async (id: string) => {
-    if (!window.confirm(t("admin.confirmDeleteStudent"))) return;
-    setDeleting(id);
+  const doDel = async () => {
+    if (!confirmDel) return;
+    setDeletingDel(true);
     try {
-      await fetch(`/api/admin/results/${id}`, { method: "DELETE" });
+      await fetch(`/api/admin/results/${confirmDel.id}`, { method: "DELETE" });
       onChange();
+      setConfirmDel(null);
     } finally {
-      setDeleting(null);
+      setDeletingDel(false);
     }
   };
 
@@ -589,9 +615,8 @@ function AnalyticsPanel({
                       {t("admin.viewResult")}
                     </a>
                     <button
-                      onClick={() => del(r.id)}
-                      disabled={deleting === r.id}
-                      className="ml-3 font-bold text-rose-400 hover:text-rose-300 disabled:opacity-50"
+                      onClick={() => setConfirmDel({ id: r.id, name: r.studentName })}
+                      className="ml-3 font-bold text-rose-400 hover:text-rose-300"
                     >
                       {t("admin.delete")}
                     </button>
@@ -604,6 +629,20 @@ function AnalyticsPanel({
       </div>
         </>
       )}
+
+      {/* Confirmar borrado de alumno (modal propio) */}
+      <Dialog
+        open={!!confirmDel}
+        onClose={() => !deletingDel && setConfirmDel(null)}
+        icon="🗑️"
+        tone="danger"
+        loading={deletingDel}
+        title={t("admin.confirmDeleteStudentTitle")}
+        description={confirmDel ? t("admin.confirmDeleteStudent", { name: confirmDel.name }) : ""}
+        confirmLabel={t("admin.delete")}
+        cancelLabel={t("common.cancel")}
+        onConfirm={doDel}
+      />
     </motion.section>
   );
 }
