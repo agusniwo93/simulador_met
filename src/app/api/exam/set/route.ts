@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
-import { getRandomExam } from "@/lib/db";
+import { buildShuffledExam } from "@/lib/db";
 import { ACCESS_COOKIE, hasValidAccess } from "@/lib/auth/access";
 import type { Exam } from "@/lib/types";
 
@@ -24,7 +24,7 @@ export async function GET() {
   if (!(await hasValidAccess(store.get(ACCESS_COOKIE)?.value))) {
     return NextResponse.json({ error: "payment_required" }, { status: 402 });
   }
-  const exam = getRandomExam();
+  const exam = buildShuffledExam();
   if (!exam) return NextResponse.json({ error: "no_exams" }, { status: 404 });
   return NextResponse.json({ exam: stripAnswers(exam) });
 }

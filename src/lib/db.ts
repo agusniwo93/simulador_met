@@ -1,7 +1,7 @@
 import fs from "fs";
 import path from "path";
 import { randomUUID } from "crypto";
-import type { Exam, ExamResult, Analytics, Section, SectionKind, ThemeSettings } from "./types";
+import type { Exam, ExamResult, Analytics, Section, SectionKind, ThemeSettings, McqItem } from "./types";
 import { DEFAULT_THEME } from "./types";
 import { SEED_SECTIONS, SEED_TITLE, SEED_DURATION, SEED_ID, SEED_VERSION } from "./exam/seed-exam";
 
@@ -97,7 +97,8 @@ function expandListeningDistractors(sections: Section[]): Section[] {
 // ---------- Exámenes ----------
 
 export function listExams(): Exam[] {
-  return read().exams;
+  // Los exámenes "chocolateados" (generados por alumno) no se listan en el admin.
+  return read().exams.filter((e) => !e.generated);
 }
 
 export function getExam(id: string): Exam | undefined {
@@ -105,9 +106,93 @@ export function getExam(id: string): Exam | undefined {
 }
 
 export function getRandomExam(): Exam | undefined {
-  const exams = read().exams;
+  const exams = read().exams.filter((e) => !e.generated);
   if (exams.length === 0) return undefined;
   return exams[Math.floor(Math.random() * exams.length)];
+}
+
+// ---------- Examen "chocolateado" (mezcla de todos los subidos) ----------
+
+function shuffle<T>(arr: T[]): T[] {
+  const a = [...arr];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+// Baraja las opciones de una pregunta MCQ y reubica el índice correcto.
+function shuffleOptions(item: McqItem): McqItem {
+  if (!item.options || item.options.length < 2) return item;
+  const order = shuffle(item.options.map((_, i) => i));
+  return {
+    ...item,
+    options: order.map((i) => item.options[i]),
+    correctIndex: Math.max(0, order.indexOf(item.correctIndex)),
+  };
+}
+
+// Construye un examen mezclando preguntas de TODOS los exámenes subidos:
+// usa el primer examen como plantilla de estructura (secciones y cuántas
+// preguntas por sección) y rellena cada sección tomando al azar del pozo común
+// de esa clase, barajando además el orden y las opciones. Lo persiste para que
+// la corrección por examId cuadre, y limpia los generados de más de 1 día.
+export function buildShuffledExam(): Exam | undefined {
+  const pool = read().exams.filter((e) => !e.generated);
+  if (pool.length === 0) return undefined;
+
+  const template = pool[0];
+
+  const sections: Section[] = template.sections.map((tSec) => {
+    const sameKind = pool.flatMap((e) => e.sections.filter((s) => s.kind === tSec.kind));
+
+    if (tSec.kind === "writing") {
+      const tasks = sameKind.flatMap((s) => s.writingTasks ?? []);
+      const n = tSec.writingTasks?.length ?? tasks.length;
+      return { ...tSec, writingTasks: shuffle(tasks).slice(0, n) };
+    }
+    if (tSec.kind === "speaking") {
+      const tasks = sameKind.flatMap((s) => s.speakingTasks ?? []);
+      const n = tSec.speakingTasks?.length ?? tasks.length;
+      return { ...tSec, speakingTasks: shuffle(tasks).slice(0, n) };
+    }
+    if (tSec.kind === "reading") {
+      const passages = sameKind.flatMap((s) => s.passages ?? []);
+      const n = tSec.passages?.length ?? passages.length;
+      // Se barajan las opciones de cada pregunta pero se conserva el orden
+      // dentro del pasaje (las preguntas pueden referirse a párrafos por orden).
+      const chosen = shuffle(passages)
+        .slice(0, n)
+        .map((p) => ({ ...p, items: p.items.map(shuffleOptions) }));
+      return { ...tSec, passages: chosen };
+    }
+    // grammar | listening: preguntas independientes → se baraja también el orden.
+    const items = sameKind.flatMap((s) => s.items ?? []);
+    const n = tSec.items?.length ?? items.length;
+    const chosen = shuffle(items).slice(0, n).map(shuffleOptions);
+    return { ...tSec, items: chosen };
+  });
+
+  const exam: Exam = {
+    id: randomUUID(),
+    title: template.title,
+    durationMinutes: template.durationMinutes,
+    sections,
+    createdAt: new Date().toISOString(),
+    generated: true,
+  };
+
+  update((db) => {
+    const dayAgo = Date.now() - 24 * 60 * 60 * 1000;
+    db.exams = db.exams.filter(
+      (e) => !(e.generated && new Date(e.createdAt).getTime() < dayAgo)
+    );
+    db.exams.push(exam);
+    return exam;
+  });
+
+  return exam;
 }
 
 export function createExam(input: { title: string; durationMinutes: number; sourceFile?: string; sections: Section[] }): Exam {

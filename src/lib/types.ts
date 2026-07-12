@@ -55,6 +55,7 @@ export interface Exam {
   sourceFile?: string;
   sections: Section[];
   seedVersion?: number; // marca de versión para el examen sembrado
+  generated?: boolean; // examen "chocolateado" para un alumno (no editable/listable)
 }
 
 // ---- Corrección ----
