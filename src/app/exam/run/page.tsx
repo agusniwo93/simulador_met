@@ -40,6 +40,15 @@ function writeJson(key: string, value: unknown) {
   }
 }
 
+// Une todas las conversaciones del Listening en un solo audio continuo (como el
+// examen real: se reproduce todo de corrido y luego se contesta).
+function buildListeningTranscript(items: { transcript?: string }[]): string {
+  return items
+    .map((it) => it.transcript?.trim())
+    .filter(Boolean)
+    .join("\n\n");
+}
+
 // Cuenta palabras: recorta y separa por espacios; vacío = 0.
 function countWords(text: string): number {
   const trimmed = text.trim();
@@ -89,12 +98,6 @@ export default function ExamRunPage() {
   const submittingRef = useRef(false);
   const autoSubmitFiredRef = useRef(false);
   const submitRef = useRef<(auto: boolean) => void>(() => {});
-
-  // ¿Soporta el navegador la Web Speech API? (respaldo del listening/speaking)
-  const [ttsSupported, setTtsSupported] = useState(true);
-  useEffect(() => {
-    setTtsSupported(typeof window !== "undefined" && "speechSynthesis" in window);
-  }, []);
 
   // ---------- 1) Carga del examen ----------
   useEffect(() => {
@@ -273,6 +276,28 @@ export default function ExamRunPage() {
     listen.stop();
   }, [activeSection, listen.stop]);
 
+  // Al ENTRAR a la sección de Listening, reproducir automáticamente todo el
+  // audio (todas las conversaciones seguidas), una sola vez.
+  const autoStartedRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    if (phase !== "exam" || !exam) return;
+    const sec = exam.sections[activeSection];
+    if (!sec || sec.kind !== "listening") return;
+    const audioId = `listen-${activeSection}`;
+    if (autoStartedRef.current.has(audioId) || played.includes(audioId)) return;
+    autoStartedRef.current.add(audioId);
+    const transcript = buildListeningTranscript(sec.items ?? []);
+    if (transcript) listen.play(audioId, transcript);
+  }, [phase, exam, activeSection, played, listen.play]);
+
+  // Marca el audio del Listening como reproducido cuando realmente suena (para
+  // no repetir; si iOS bloquea el auto-play, no se marca y queda el botón Play).
+  useEffect(() => {
+    if (listen.activeId?.startsWith("listen-") && listen.status === "playing") {
+      markPlayed(listen.activeId);
+    }
+  }, [listen.activeId, listen.status, markPlayed]);
+
   // ---------- 6) Envío del examen ----------
   const submitExam = useCallback(
     async (autoSubmitted: boolean) => {
@@ -343,6 +368,7 @@ export default function ExamRunPage() {
   const handleStart = useCallback(() => {
     const name = nameInput.trim();
     if (name.length < 3) return;
+    unlockAudio(); // habilita el audio (iOS) dentro del gesto de inicio
     try {
       localStorage.setItem(LS_NAME, name);
     } catch {
@@ -646,53 +672,52 @@ export default function ExamRunPage() {
                 </div>
               )}
 
-              {/* ----- LISTENING ----- */}
-              {current.kind === "listening" && (
-                <div className="mt-6">
-                  <div className="rounded-2xl border border-indigo-400/20 bg-indigo-400/5 p-4 text-sm text-slate-300">
-                    🎧 {t("exam.listenHint")}
-                    {!ttsSupported && (
-                      <span className="mt-2 block font-medium text-amber-300">
-                        {t("exam.ttsUnsupported")}
-                      </span>
-                    )}
-                  </div>
-                  <div className="mt-5 space-y-5">
-                    {(current.items ?? []).map((item, n) => (
-                      <McqCard
-                        key={item.id}
-                        item={item}
-                        number={n + 1}
-                        selected={
-                          typeof answers[item.id] === "number" ? (answers[item.id] as number) : null
-                        }
-                        onSelect={(idx) => setChoice(item.id, idx)}
-                        questionLabel={t("exam.question")}
-                        chooseLabel={t("exam.chooseOption")}
-                        hideStem={false}
-                        audio={
-                          item.transcript ? (
-                            <ListenControls
-                              player={listen}
-                              id={item.id}
-                              transcript={item.transcript}
-                              played={played.includes(item.id)}
-                              allowReplay={config.allowListeningReplay}
-                              onPlay={() => markPlayed(item.id)}
-                              labels={{
-                                listen: t("exam.listenPlay"),
-                                playing: t("exam.listenPlaying"),
-                                loading: t("common.loading"),
-                                played: t("exam.listenPlayed"),
-                              }}
-                            />
-                          ) : null
-                        }
-                      />
-                    ))}
-                  </div>
-                </div>
-              )}
+              {/* ----- LISTENING (audio completo + solo preguntas) ----- */}
+              {current.kind === "listening" &&
+                (() => {
+                  const fullTranscript = buildListeningTranscript(current.items ?? []);
+                  const audioId = `listen-${activeSection}`;
+                  return (
+                    <div className="mt-6">
+                      {/* Barra del audio completo (arriba, centrada) */}
+                      {fullTranscript && (
+                        <div className="glass glow-ring flex flex-col items-center gap-3 rounded-3xl p-5 text-center sm:p-6">
+                          <p className="text-sm text-slate-300">🎧 {t("exam.listenHint")}</p>
+                          <ListenControls
+                            player={listen}
+                            id={audioId}
+                            transcript={fullTranscript}
+                            played={played.includes(audioId)}
+                            allowReplay={config.allowListeningReplay}
+                            onPlay={() => markPlayed(audioId)}
+                            labels={{
+                              listen: t("exam.listenPlay"),
+                              playing: t("exam.listenPlaying"),
+                              loading: t("common.loading"),
+                              played: t("exam.listenPlayed"),
+                            }}
+                          />
+                        </div>
+                      )}
+                      <div className="mt-5 space-y-5">
+                        {(current.items ?? []).map((item, n) => (
+                          <McqCard
+                            key={item.id}
+                            item={item}
+                            number={n + 1}
+                            selected={
+                              typeof answers[item.id] === "number" ? (answers[item.id] as number) : null
+                            }
+                            onSelect={(idx) => setChoice(item.id, idx)}
+                            questionLabel={t("exam.question")}
+                            chooseLabel={t("exam.chooseOption")}
+                            hideStem={false}
+                          />
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })()}
 
               {/* ----- READING ----- */}
               {current.kind === "reading" && (
@@ -836,6 +861,7 @@ export default function ExamRunPage() {
         confirmLabel={t("exam.nextSection")}
         cancelLabel={t("common.cancel")}
         onConfirm={() => {
+          unlockAudio(); // mantener el audio habilitado para el auto-play del Listening
           setNextOpen(false);
           advanceSection();
         }}
