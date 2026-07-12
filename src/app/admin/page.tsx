@@ -138,8 +138,19 @@ export default function AdminPage() {
           animate={{ opacity: 1, y: 0 }}
           className="glass rounded-3xl p-6 sm:p-8 mt-6"
         >
-          <h2 className="text-xl font-black">{t("admin.uploadTitle")}</h2>
-          <p className="mt-1 text-slate-400 text-sm">{t("admin.uploadDesc")}</p>
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h2 className="text-xl font-black">{t("admin.uploadTitle")}</h2>
+              <p className="mt-1 text-slate-400 text-sm">{t("admin.uploadDesc")}</p>
+            </div>
+            <a
+              href="/plantilla-examen.txt"
+              download
+              className="glass rounded-xl px-4 py-2 text-sm font-bold text-cyan-300 hover:bg-white/10 transition-colors shrink-0"
+            >
+              ⬇ {t("admin.downloadTemplate")}
+            </a>
+          </div>
           <form onSubmit={upload} className="mt-5 flex flex-col gap-4">
             <input
               value={title}
@@ -153,7 +164,7 @@ export default function AdminPage() {
                 <input
                   ref={fileRef}
                   type="file"
-                  accept="application/pdf,.pdf"
+                  accept="application/pdf,.pdf,.txt,text/plain"
                   onChange={(e) => setFile(e.target.files?.[0] ?? null)}
                   className="hidden"
                 />

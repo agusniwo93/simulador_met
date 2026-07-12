@@ -22,9 +22,12 @@ export async function POST(req: Request) {
 
   const buffer = Buffer.from(await file.arrayBuffer());
 
+  // Se acepta la plantilla como .txt (se lee directo) o como PDF (se extrae el texto).
+  const isTxt = (file.name || "").toLowerCase().endsWith(".txt") || file.type === "text/plain";
+
   let text = "";
   try {
-    text = await extractPdfText(buffer);
+    text = isTxt ? buffer.toString("utf-8") : await extractPdfText(buffer);
   } catch {
     return NextResponse.json({ error: "parseError" }, { status: 422 });
   }

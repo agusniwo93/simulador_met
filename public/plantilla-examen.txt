@@ -1,0 +1,64 @@
+SIMULADOR DE EJEMPLO
+
+=======================================================================
+ INSTRUCCIONES (borra estas líneas antes de subir)
+ - La PRIMERA línea es el título del examen.
+ - Escribe cada sección con su encabezado en MAYÚSCULAS:
+   WRITING, LISTENING, GRAMMAR, READING, SPEAKING.
+ - Puedes subir este archivo tal cual (.txt) o exportarlo a PDF.
+ - Puedes omitir secciones que no uses.
+=======================================================================
+
+WRITING
+What time do you usually start studying?
+Why do you study at that time?
+Which do you prefer, studying at night or during the day, and why?
+
+LISTENING
+Audio 1
+WOMAN: You're a great cook. You should open a small restaurant.
+MAN: That sounds nice, but running a restaurant is a lot of work. I'd rather teach cooking classes.
+Question: What does the man prefer to do?
+Answer: He prefers to teach cooking classes.
+Audio 2
+MAN: Your paintings are amazing. You should sell them online.
+WOMAN: Maybe, but I'd rather give them to my friends and family.
+Question: What does the woman want to do with her paintings?
+Answer: She wants to give them to her friends and family.
+
+GRAMMAR
+1. She asked me __________ the door before leaving.
+A) close
+B) closing
+C) to close
+D) closed
+Answer key: C) to close
+2. If I __________ more time, I would travel the world.
+A) have
+B) had
+C) will have
+D) would have
+Answer key: B) had
+
+READING
+Text 1
+This passage is about recycling in cities.
+Many cities around the world are trying to reduce waste. Recycling programs allow residents to separate paper, plastic, and glass so these materials can be reused instead of thrown away. Studies show that cities with strong recycling programs produce less garbage and save money on waste disposal.
+1. What is the passage mostly about?
+A. how to start a business
+B. recycling programs in cities
+C. the history of garbage
+D. how to save money at home
+Answer: B. recycling programs in cities
+2. According to the passage, what is one benefit of recycling?
+A. it makes cities larger
+B. it produces more garbage
+C. it saves money on waste disposal
+D. it increases pollution
+Answer: C. it saves money on waste disposal
+
+SPEAKING
+Task 1
+Describe a place where you like to relax.
+Task 2
+Tell me about a time when you helped someone.
