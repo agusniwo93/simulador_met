@@ -7,6 +7,8 @@ import Background3D from "@/components/visual/Background3D";
 import LanguageToggle from "@/components/ui/LanguageToggle";
 import Dialog from "@/components/ui/Dialog";
 import { useI18n } from "@/lib/i18n/context";
+import { parseDialogue } from "@/lib/exam/dialogue";
+import { playTTS, unlockAudio, stopAudio } from "@/lib/tts/player";
 import type { Exam, Section, McqItem } from "@/lib/types";
 
 type TFn = (path: string, params?: Record<string, string | number>) => string;
@@ -42,32 +44,6 @@ type Phase = "loading" | "no-exam" | "name-gate" | "exam";
 
 // Valor de una respuesta: texto (writing) o índice de opción (mcq).
 type AnswerValue = string | number;
-
-// Parte un guion de listening en turnos por hablante para leerlo como una
-// conversación real: la etiqueta ("Woman:", "Man:", …) decide la voz y NO se
-// pronuncia. Woman/Girl → voz de mujer; Man/Boy → voz de hombre.
-type DialogueSeg = { speaker: "female" | "male" | "narrator"; text: string };
-function parseDialogue(transcript: string): DialogueSeg[] {
-  const labelRe = /^(woman|man|girl|boy|female|male|narrator|w|m|speaker\s*[12]?)\s*[:.\-–]\s*/i;
-  const segs: DialogueSeg[] = [];
-  let current: DialogueSeg["speaker"] = "narrator";
-  for (const raw of transcript.split(/\n+/)) {
-    const line = raw.trim();
-    if (!line) continue;
-    const m = line.match(labelRe);
-    let text = line;
-    if (m) {
-      const label = m[1].toLowerCase().replace(/\s+/g, " ");
-      current =
-        /^(woman|girl|female|w|speaker 1)$/.test(label) ? "female"
-        : /^(man|boy|male|m|speaker 2)$/.test(label) ? "male"
-        : "narrator";
-      text = line.slice(m[0].length).trim();
-    }
-    if (text) segs.push({ speaker: current, text });
-  }
-  return segs.length ? segs : [{ speaker: "narrator", text: transcript }];
-}
 
 export default function ExamRunPage() {
   const router = useRouter();
@@ -270,40 +246,60 @@ export default function ExamRunPage() {
     setAnswers((prev) => ({ ...prev, [taskId]: url }));
   }, []);
 
-  // ---------- Web Speech API (listening) ----------
+  // ---------- Listening: voz del navegador (respaldo) ----------
+  const speakBrowser = useCallback((itemId: string, transcript: string) => {
+    if (!ttsSupported || !transcript) return;
+    try {
+      speechSynthesis.cancel();
+      const segments = parseDialogue(transcript);
+      const { female, male } = voicesRef.current;
+      const last = segments.length - 1;
+      segments.forEach((seg, i) => {
+        const u = new SpeechSynthesisUtterance(seg.text);
+        u.lang = "en-US";
+        u.rate = 0.95;
+        const voice = seg.speaker === "male" ? male : female ?? male;
+        if (voice) u.voice = voice;
+        // Diferencia el tono aunque el navegador tenga una sola voz.
+        u.pitch = seg.speaker === "male" ? 0.8 : seg.speaker === "female" ? 1.15 : 1;
+        if (i === last) {
+          u.onend = () => setSpeakingId((cur) => (cur === itemId ? null : cur));
+        }
+        u.onerror = () => setSpeakingId((cur) => (cur === itemId ? null : cur));
+        speechSynthesis.speak(u);
+      });
+      setSpeakingId(itemId);
+    } catch {
+      setSpeakingId(null);
+    }
+  }, [ttsSupported]);
+
+  // ---------- Listening: voces reales (ElevenLabs) con respaldo al navegador ----------
+  const playTokenRef = useRef(0);
   const speak = useCallback(
     (itemId: string, transcript: string) => {
-      if (!ttsSupported || !transcript) return;
-      try {
-        speechSynthesis.cancel();
-        const segments = parseDialogue(transcript);
-        const { female, male } = voicesRef.current;
-        const last = segments.length - 1;
-        segments.forEach((seg, i) => {
-          const u = new SpeechSynthesisUtterance(seg.text);
-          u.lang = "en-US";
-          u.rate = 0.95;
-          const voice = seg.speaker === "male" ? male : female ?? male;
-          if (voice) u.voice = voice;
-          // Diferencia el tono aunque el navegador tenga una sola voz.
-          u.pitch = seg.speaker === "male" ? 0.8 : seg.speaker === "female" ? 1.15 : 1;
-          if (i === last) {
-            u.onend = () => setSpeakingId((cur) => (cur === itemId ? null : cur));
-          }
-          u.onerror = () => setSpeakingId((cur) => (cur === itemId ? null : cur));
-          speechSynthesis.speak(u);
+      if (!transcript) return;
+      unlockAudio(); // debe correr dentro del gesto (clic) para iOS
+      stopAudio();
+      if (typeof window !== "undefined" && "speechSynthesis" in window) speechSynthesis.cancel();
+      const token = ++playTokenRef.current;
+      setSpeakingId(itemId);
+      playTTS(transcript, { dialogue: true })
+        .then(() => {
+          if (playTokenRef.current === token) setSpeakingId((cur) => (cur === itemId ? null : cur));
+        })
+        .catch(() => {
+          // Si ElevenLabs no está disponible/permitido, usamos la voz del navegador.
+          if (playTokenRef.current === token) speakBrowser(itemId, transcript);
         });
-        setSpeakingId(itemId);
-      } catch {
-        setSpeakingId(null);
-      }
     },
-    [ttsSupported]
+    [speakBrowser]
   );
 
   // Detener cualquier locución al desmontar / cambiar de sección.
   useEffect(() => {
     return () => {
+      stopAudio();
       if (typeof window !== "undefined" && "speechSynthesis" in window) {
         speechSynthesis.cancel();
       }
@@ -311,6 +307,7 @@ export default function ExamRunPage() {
   }, []);
 
   useEffect(() => {
+    stopAudio();
     if (typeof window !== "undefined" && "speechSynthesis" in window) {
       speechSynthesis.cancel();
     }
@@ -1096,6 +1093,7 @@ function SpeakingRecorder({
   // al terminar la lectura, graba automáticamente.
   const begin = useCallback(async () => {
     if (!supported) return;
+    unlockAudio(); // dentro del gesto (iOS)
     try {
       streamRef.current = await navigator.mediaDevices.getUserMedia({ audio: true });
     } catch {
@@ -1104,21 +1102,25 @@ function SpeakingRecorder({
     }
     setState("reading");
     const go = () => recordOnStream();
-    try {
-      if (typeof window !== "undefined" && "speechSynthesis" in window && promptText) {
-        speechSynthesis.cancel();
-        const u = new SpeechSynthesisUtterance(promptText);
-        u.lang = "en-US";
-        u.rate = 0.95;
-        u.onend = go;
-        u.onerror = go;
-        speechSynthesis.speak(u);
-      } else {
+    // Respaldo con la voz del navegador si ElevenLabs no está disponible.
+    const readWithBrowser = () => {
+      try {
+        if (typeof window !== "undefined" && "speechSynthesis" in window && promptText) {
+          speechSynthesis.cancel();
+          const u = new SpeechSynthesisUtterance(promptText);
+          u.lang = "en-US";
+          u.rate = 0.95;
+          u.onend = go;
+          u.onerror = go;
+          speechSynthesis.speak(u);
+        } else {
+          go();
+        }
+      } catch {
         go();
       }
-    } catch {
-      go();
-    }
+    };
+    playTTS(promptText, { dialogue: false }).then(go).catch(readWithBrowser);
   }, [supported, promptText, recordOnStream]);
 
   const stop = useCallback(() => {
