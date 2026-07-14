@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
-import { buildShuffledExam, getRandomExam, getExamConfig } from "@/lib/db";
+import { getRandomExam, getExamConfig, listExams } from "@/lib/db";
 import { ACCESS_COOKIE, hasValidAccess } from "@/lib/auth/access";
 import type { Exam } from "@/lib/types";
 
@@ -25,8 +25,10 @@ export async function GET() {
     return NextResponse.json({ error: "payment_required" }, { status: 402 });
   }
   const config = getExamConfig();
-  // Chocolatear activo → mezcla y baraja; desactivado → un examen tal cual se subió.
-  const exam = config.shuffle ? buildShuffledExam() : getRandomExam();
+  // Chocolatear entre EXÁMENES: cada alumno recibe un examen completo al azar
+  // (distinto entre alumnos), sin mezclar preguntas de distintos exámenes.
+  // Desactivado → el mismo examen fijo para todos (el primero subido).
+  const exam = config.shuffle ? getRandomExam() : listExams()[0];
   if (!exam) return NextResponse.json({ error: "no_exams" }, { status: 404 });
   return NextResponse.json({ exam: stripAnswers(exam), config });
 }

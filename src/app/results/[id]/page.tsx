@@ -53,6 +53,15 @@ function bandFor(score: number): Band {
   };
 }
 
+// Nivel MCER (CEFR) aproximado según el puntaje del examen, como reporta el MET.
+function cefrLevel(score: number): { level: string; label: string } {
+  if (score >= 85) return { level: "C1", label: "Advanced" };
+  if (score >= 70) return { level: "B2", label: "Upper-Intermediate" };
+  if (score >= 55) return { level: "B1", label: "Intermediate" };
+  if (score >= 40) return { level: "A2", label: "Elementary" };
+  return { level: "A1", label: "Beginner" };
+}
+
 const MAX_VISIBLE_ISSUES = 8;
 
 // Extensión del archivo de audio a partir de su URL (para el nombre de descarga).
@@ -441,6 +450,7 @@ export default function ResultPage() {
   }
 
   const overall = bandFor(result.overallScore);
+  const cefr = cefrLevel(result.overallScore);
 
   return (
     <main className="relative min-h-screen pb-20">
@@ -472,6 +482,18 @@ export default function ResultPage() {
             <p className="text-xs font-semibold uppercase tracking-widest text-slate-500">
               {t("results.overall")}
             </p>
+            {/* Nivel MCER (CEFR) — como el reporte del MET */}
+            <div className="mt-3 flex items-center justify-center gap-3 sm:justify-start">
+              <span className="flex h-16 w-16 shrink-0 flex-col items-center justify-center rounded-2xl bg-gradient-to-br from-cyan-500 to-indigo-600 text-white shadow-[0_10px_30px_-10px_rgba(99,102,241,0.7)]">
+                <span className="text-2xl font-black leading-none">{cefr.level}</span>
+              </span>
+              <div className="min-w-0">
+                <p className="text-[11px] font-semibold uppercase tracking-widest text-slate-500">
+                  {t("results.cefrLevel")}
+                </p>
+                <p className="text-lg font-bold text-slate-100">{cefr.label}</p>
+              </div>
+            </div>
             <div className="mt-3">
               <span
                 className={`inline-block rounded-full border px-4 py-1.5 text-sm font-semibold ${overall.chipBg} ${overall.chipText}`}

@@ -5,6 +5,7 @@ import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import Background3D from "@/components/visual/Background3D";
 import Dialog from "@/components/ui/Dialog";
+import WhatsAppButton from "@/components/ui/WhatsAppButton";
 import { useT } from "@/lib/i18n/context";
 
 const fadeUp = {
@@ -140,6 +141,7 @@ export default function LandingClient({ hasAccess, autoPay = false, payFailed = 
 
   return (
     <main className="relative min-h-screen overflow-hidden text-slate-100">
+      <WhatsAppButton />
       <Background3D variant="deep" className="fixed inset-0 -z-10" />
       <div className="fixed inset-0 -z-10 bg-gradient-to-b from-transparent via-[#020617]/40 to-[#020617]" />
 
