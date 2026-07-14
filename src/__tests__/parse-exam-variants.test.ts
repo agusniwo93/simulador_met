@@ -94,6 +94,49 @@ Questions and answers
     expect(listening?.items?.[1].options[0]).toContain("tour the building");
   });
 
+  it("Reading/Speaking del .docx: anuncios con imagen (marcador @@IMG@@) y opciones apelmazadas", () => {
+    const text = `READING
+This passage is about cats.
+Cats sleep a lot during the day.
+1. What do cats do a lot?
+A. sleep
+B. run
+C. swim
+D. fly
+Answer: A. sleep
+
+READING PARTE 2
+@@IMG:/seed/x/ad1.webp@@
+1. What is the advertisement for?
+A. a guided beach walk B. a city museum C. a running race D. a music concert
+Answer: A. a guided beach walk
+2. When does it take place?
+A. on Monday B. on Saturday C. on Sunday D. on Friday
+Answer: B. on Saturday
+
+SPEAKING
+@@IMG:/seed/x/photo.webp@@
+Task 2
+Tell me about your favorite place.`;
+    const { sections } = parseExam(text);
+    const reading = sections.find((s) => s.kind === "reading");
+    // 1 pasaje de texto + 1 anuncio con imagen.
+    expect(reading?.passages?.length).toBe(2);
+    const ad = reading?.passages?.find((p) => p.imageUrl);
+    expect(ad?.imageUrl).toBe("/seed/x/ad1.webp");
+    expect(ad?.items.length).toBe(2);
+    // Opciones apelmazadas divididas en 4.
+    expect(ad?.items[0].options.length).toBe(4);
+    expect(ad?.items[0].options[ad!.items[0].correctIndex]).toContain("beach walk");
+    expect(ad?.items[1].options[ad!.items[1].correctIndex]).toContain("Saturday");
+    // El marcador no debe filtrarse al texto del enunciado.
+    expect(ad?.items[0].stem).not.toContain("@@");
+    // Speaking: la foto (marcador no usado por Reading) es la tarea 1.
+    const speaking = sections.find((s) => s.kind === "speaking");
+    expect(speaking?.speakingTasks?.[0].imageUrl).toBe("/seed/x/photo.webp");
+    expect(speaking?.speakingTasks?.some((t) => t.prompt.includes("favorite place"))).toBe(true);
+  });
+
   it("Listening del PDF: el checkbox llega como carácter de reemplazo (�)", () => {
     // En el PDF real el ✅ se extrae como U+FFFD; el parser lo normaliza.
     const text = `LISTENING

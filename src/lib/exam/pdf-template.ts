@@ -22,6 +22,48 @@ export async function extractPdfText(buffer: Buffer): Promise<string> {
   }
 }
 
+export interface DocxImage {
+  ext: string;
+  buffer: Buffer;
+}
+
+// Extrae el texto de un .docx CON las imágenes embebidas en su posición: cada
+// imagen se reemplaza por un marcador `@@IMGREF{i}@@` en el flujo del texto, y
+// se devuelven los buffers en orden de documento. El que llama guarda las
+// imágenes y sustituye cada `@@IMGREF{i}@@` por `@@IMG:{url}@@` (que el parser
+// asocia a los anuncios de Reading y a la foto de Speaking).
+export async function extractDocx(
+  buffer: Buffer
+): Promise<{ text: string; images: DocxImage[] }> {
+  const mammoth = (await import("mammoth")).default;
+  const images: DocxImage[] = [];
+  const convertImage = mammoth.images.imgElement((image: {
+    contentType: string;
+    read: (enc: string) => Promise<string>;
+  }) => {
+    return image.read("base64").then((b64) => {
+      const idx = images.length;
+      const ext = (image.contentType.split("/")[1] || "png").replace("jpeg", "jpeg");
+      images.push({ ext, buffer: Buffer.from(b64, "base64") });
+      return { src: `@@IMGREF${idx}@@` };
+    });
+  });
+  const { value: html } = await mammoth.convertToHtml({ buffer }, { convertImage });
+  const text = html
+    .replace(/<img[^>]*src="@@IMGREF(\d+)@@"[^>]*>/g, "\n@@IMGREF$1@@\n")
+    .replace(/<\/(p|div|h[1-6]|li|tr|table)>/gi, "\n")
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<[^>]+>/g, "")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;|&apos;/gi, "'")
+    .replace(/\n[ \t]+/g, "\n");
+  return { text, images };
+}
+
 // ========================================================================
 //  Parser del formato NATURAL del examen (Writing / Listening / Grammar /
 //  Reading / Speaking), tal como salen los simuladores en PDF. Detecta las
@@ -29,7 +71,13 @@ export async function extractPdfText(buffer: Buffer): Promise<string> {
 // ========================================================================
 
 // Quita centinelas de página y normaliza espacios.
-const clean = (s: string): string => s.replace(/@@P\d+@@/g, " ").replace(/\s+/g, " ").trim();
+const clean = (s: string): string =>
+  s
+    .replace(/@@P\d+@@/g, " ")
+    .replace(/@@IMG:[^@]*@@/g, " ")
+    .replace(/@@IMGREF\d+@@/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
 
 function normalizeExamText(text: string): string {
   return text
@@ -267,10 +315,19 @@ function parseReadingQuestions(lines: string[], startIdx: number, idPrefix: stri
       j++;
     }
     const options: string[] = [];
-    for (const L of ["A", "B", "C", "D"]) {
-      if (j < lines.length && new RegExp(`^${L}[.)]\\s`).test(lines[j])) {
-        options.push(lines[j].replace(/^[A-D][.)]\s*/, "").trim());
-        j++;
+    // Opciones "apelmazadas" en una sola línea ("A. x B. y C. z D. w").
+    if (j < lines.length && /^A[.)]\s.*\sB[.)]\s.*\sC[.)]\s.*\sD[.)]\s/.test(lines[j])) {
+      for (const part of lines[j].split(/\s+(?=[A-D][.)]\s)/)) {
+        const mo = part.match(/^[A-D][.)]\s*(.*)$/);
+        if (mo) options.push(mo[1].trim());
+      }
+      j++;
+    } else {
+      for (const L of ["A", "B", "C", "D"]) {
+        if (j < lines.length && new RegExp(`^${L}[.)]\\s`).test(lines[j])) {
+          options.push(lines[j].replace(/^[A-D][.)]\s*/, "").trim());
+          j++;
+        }
       }
     }
     let correctIndex = 0;
@@ -372,19 +429,38 @@ function parseReadingSection(
     });
   }
 
+  // Anuncios por-imagen del .docx: cada marcador @@IMG:url@@ precede a las
+  // preguntas de ese anuncio. El marcador sin preguntas (la foto de Speaking) se
+  // ignora aquí.
+  const imgMarks = [...content.matchAll(/@@IMG:([^@]+)@@/g)];
+  for (let i = 0; i < imgMarks.length; i++) {
+    const mk = imgMarks[i];
+    const start = (mk.index as number) + mk[0].length;
+    const end = i + 1 < imgMarks.length ? (imgMarks[i + 1].index as number) : content.length;
+    const chunkLines = content.slice(start, end).split("\n").map((l) => l.trim()).filter(Boolean);
+    const items = parseReadingQuestions(chunkLines, 0, `p${passages.length + 1}`);
+    if (!items.length) continue;
+    passages.push({ id: `p${passages.length + 1}`, imageUrl: mk[1], items });
+  }
+
   return passages;
 }
 
 function parseSpeakingSection(
   content: string,
   startPage: number,
-  imagesByPage: ImagesByPage
+  imagesByPage: ImagesByPage,
+  pictureUrl?: string
 ): SpeakingTask[] {
   const marks = [...content.matchAll(/Task\s*\d+/gi)].map((m) => ({
     start: m.index as number,
     end: (m.index as number) + m[0].length,
   }));
   const tasks: SpeakingTask[] = [];
+  // .docx: la foto de Speaking (Task 1 "describe la imagen") viene aparte.
+  if (pictureUrl) {
+    tasks.push({ id: "sp1", prompt: "Task 1 — Describe the picture.", imageUrl: pictureUrl });
+  }
   for (let i = 0; i < marks.length; i++) {
     const block = content.slice(marks[i].end, i + 1 < marks.length ? marks[i + 1].start : content.length);
     const prompt = clean(block);
@@ -428,12 +504,24 @@ export function parseExam(rawText: string, imagesByPage: ImagesByPage = {}): Par
     const items = parseGrammarSection(raw.GRAMMAR.content);
     if (items.length) sections.push({ kind: "grammar", title: "Grammar", items });
   }
+  const readingImgs = new Set<string>();
   if (raw.READING) {
     const passages = parseReadingSection(raw.READING.content, raw.READING.startPage, images);
+    passages.forEach((p) => p.imageUrl && readingImgs.add(p.imageUrl));
     if (passages.length) sections.push({ kind: "reading", title: "Reading", passages });
   }
   if (raw.SPEAKING) {
-    const speakingTasks = parseSpeakingSection(raw.SPEAKING.content, raw.SPEAKING.startPage, images);
+    // La foto de Speaking (.docx) es el marcador de imagen que Reading no usó.
+    const pictureUrl = [...text.matchAll(/@@IMG:([^@]+)@@/g)]
+      .map((m) => m[1])
+      .filter((u) => !readingImgs.has(u))
+      .pop();
+    const speakingTasks = parseSpeakingSection(
+      raw.SPEAKING.content,
+      raw.SPEAKING.startPage,
+      images,
+      pictureUrl
+    );
     if (speakingTasks.length) sections.push({ kind: "speaking", title: "Speaking", speakingTasks });
   }
 

@@ -5,7 +5,13 @@ import { randomUUID } from "crypto";
 import { cookies } from "next/headers";
 import { ADMIN_COOKIE, hasAdminSession } from "@/lib/auth/admin-session";
 import { createExam, UPLOAD_DIR } from "@/lib/db";
-import { extractPdfText, extractPdfImages, parseExam, type ImagesByPage } from "@/lib/exam/pdf-template";
+import {
+  extractPdfText,
+  extractPdfImages,
+  extractDocx,
+  parseExam,
+  type ImagesByPage,
+} from "@/lib/exam/pdf-template";
 
 export async function POST(req: Request) {
   const store = await cookies();
@@ -36,8 +42,40 @@ export async function POST(req: Request) {
     if (isTxt) {
       text = buffer.toString("utf-8");
     } else if (isDocx) {
-      const mammoth = (await import("mammoth")).default;
-      text = (await mammoth.extractRawText({ buffer })).value;
+      // .docx CON imágenes: se extraen los anuncios de Reading y la foto de
+      // Speaking, se guardan (comprimidas a WebP) y se inyectan como marcadores
+      // @@IMG:url@@ en su posición para que el parser las asocie.
+      if (!fs.existsSync(UPLOAD_DIR)) fs.mkdirSync(UPLOAD_DIR, { recursive: true });
+      const { text: docxText, images } = await extractDocx(buffer);
+      let sharp: ((input: Buffer) => import("sharp").Sharp) | null = null;
+      try {
+        sharp = (await import("sharp")).default as unknown as (input: Buffer) => import("sharp").Sharp;
+      } catch {
+        sharp = null;
+      }
+      const urls: string[] = [];
+      for (let i = 0; i < images.length; i++) {
+        let outBuf = images[i].buffer;
+        let ext = images[i].ext;
+        if (sharp) {
+          try {
+            outBuf = await sharp(images[i].buffer)
+              .resize({ width: 1200, withoutEnlargement: true })
+              .webp({ quality: 82 })
+              .toBuffer();
+            ext = "webp";
+          } catch {
+            /* si falla la compresión, se guarda el original */
+          }
+        }
+        const name = `img-${Date.now()}-${randomUUID().slice(0, 8)}.${ext}`;
+        fs.writeFileSync(path.join(UPLOAD_DIR, name), outBuf);
+        urls.push(`/api/media/${name}`);
+      }
+      text = docxText;
+      urls.forEach((u, i) => {
+        text = text.split(`@@IMGREF${i}@@`).join(`@@IMG:${u}@@`);
+      });
     } else {
       text = await extractPdfText(buffer);
       // Extraemos las imágenes del PDF (anuncios de Reading, foto de Speaking) y
