@@ -176,7 +176,7 @@ export default function AdminPage() {
                 <input
                   ref={fileRef}
                   type="file"
-                  accept="application/pdf,.pdf,.txt,text/plain"
+                  accept="application/pdf,.pdf,.txt,text/plain,.docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
                   onChange={(e) => setFile(e.target.files?.[0] ?? null)}
                   className="hidden"
                 />

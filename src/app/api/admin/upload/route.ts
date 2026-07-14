@@ -23,14 +23,21 @@ export async function POST(req: Request) {
 
   const buffer = Buffer.from(await file.arrayBuffer());
 
-  // Se acepta la plantilla como .txt (se lee directo) o como PDF (se extrae el texto).
-  const isTxt = (file.name || "").toLowerCase().endsWith(".txt") || file.type === "text/plain";
+  // Se acepta .txt (directo), .docx (Word) o PDF.
+  const fname = (file.name || "").toLowerCase();
+  const isTxt = fname.endsWith(".txt") || file.type === "text/plain";
+  const isDocx =
+    fname.endsWith(".docx") ||
+    file.type === "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
 
   let text = "";
   const imagesByPage: ImagesByPage = {};
   try {
     if (isTxt) {
       text = buffer.toString("utf-8");
+    } else if (isDocx) {
+      const mammoth = (await import("mammoth")).default;
+      text = (await mammoth.extractRawText({ buffer })).value;
     } else {
       text = await extractPdfText(buffer);
       // Extraemos las imágenes del PDF (anuncios de Reading, foto de Speaking) y

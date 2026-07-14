@@ -164,16 +164,20 @@ function parseListeningSection(content: string): McqItem[] {
 }
 
 function parseGrammarSection(content: string): McqItem[] {
+  // Tolerante a: preguntas sin número, opciones pegadas ("A) xB) y") y el texto
+  // de "Answer key: X) …" que se debe consumir para que no se filtre al stem.
   const re =
-    /(\d+)\.\s*([\s\S]*?)\bA\)\s*([\s\S]*?)\bB\)\s*([\s\S]*?)\bC\)\s*([\s\S]*?)\bD\)\s*([\s\S]*?)Answer key\s*:\s*([A-D])\)/gi;
+    /([\s\S]*?)A[).]\s*([\s\S]*?)B[).]\s*([\s\S]*?)C[).]\s*([\s\S]*?)D[).]\s*([\s\S]*?)Answer\s*key\s*:\s*([A-D])[).][^\n]*/gi;
   const items: McqItem[] = [];
   let m: RegExpExecArray | null;
   let i = 0;
   while ((m = re.exec(content))) {
-    const [, , stem, a, b, c, d, correct] = m;
+    const [, stem, a, b, c, d, correct] = m;
+    const cleanStem = clean(stem).replace(/^\d+\.\s*/, "");
+    if (!cleanStem) continue;
     items.push({
       id: `g${++i}`,
-      stem: clean(stem),
+      stem: cleanStem,
       options: [a, b, c, d].map(clean),
       correctIndex: Math.max(0, "ABCD".indexOf(correct.toUpperCase())),
     });
