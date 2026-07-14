@@ -34,7 +34,7 @@ const clean = (s: string): string => s.replace(/@@P\d+@@/g, " ").replace(/\s+/g,
 function normalizeExamText(text: string): string {
   return text
     .replace(/--\s*(\d+)\s*of\s*\d+\s*--/gi, "\n@@P$1@@\n") // página → centinela @@Pn@@
-    .replace(/�/g, " ") // carácter de reemplazo (checkbox del PDF)
+    .replace(/�/g, "✅") // el checkbox de respuesta del PDF llega como carácter de reemplazo
     .replace(/\r/g, "")
     .replace(/[\t ]+/g, " ")
     .replace(/[ ]{2,}/g, " ");
@@ -138,28 +138,94 @@ function parseWritingSection(content: string): WritingTask[] {
     .map((prompt, i) => ({ id: `w${i + 1}`, prompt, minWords: prompt.length > 140 ? 150 : 20 }));
 }
 
-function parseListeningSection(content: string): McqItem[] {
-  const blocks = content.split(/Audio\s*\d+/i).slice(1);
-  const items: McqItem[] = [];
-  blocks.forEach((b, i) => {
-    const qi = b.search(/Question\s*:/i);
-    const ai = b.search(/Answer\s*:/i);
-    if (qi < 0 || ai < 0) return;
-    const transcript = b
-      .slice(0, qi)
-      .replace(/PARTE\s*\d+/gi, "")
-      .replace(/\n?@@P\d+@@\n?/g, "\n")
-      .trim();
-    const stem = clean(b.slice(qi, ai).replace(/Question\s*:/i, ""));
-    const correct = clean(b.slice(ai).replace(/Answer\s*:/i, "").split("\n")[0]).replace(
-      /^[^A-Za-z0-9¿¡"']+/,
-      ""
-    );
-    if (stem && correct) {
-      // Solo la respuesta correcta; los distractores se generan al crear el examen.
-      items.push({ id: `l${i + 1}`, stem, options: [correct], correctIndex: 0, transcript });
+// Limpia el guion de un audio (quita centinelas, "PARTE N" y el número de audio
+// que a veces queda al inicio, p. ej. "1\n\nStudent: ..." → "Student: ...").
+function cleanTranscript(s: string): string {
+  return s
+    .replace(/\n?@@P\d+@@\n?/g, "\n")
+    .replace(/PARTE\s*\d+/gi, "")
+    .replace(/^[\s\d.]+(?=[A-Za-z])/, "")
+    .trim();
+}
+
+// Quita marcas de respuesta ("Answer:", "✅", checkbox) del inicio.
+function stripAnswerMark(s: string): string {
+  return clean(s.replace(/Answer\s*:/i, "")).replace(/^[^A-Za-z0-9¿¡"'(]+/, "");
+}
+
+// Parte 2/3: un audio con varias preguntas y respuestas (marcadas con ✅). El
+// enunciado y la respuesta pueden ir en líneas separadas ("stem\n✅ answer") o
+// en la misma línea ("stem?✅ answer"); se soportan ambos.
+function parseMultiQA(qa: string): { stem: string; correct: string }[] {
+  const lines = qa.split("\n").map((l) => l.replace(/@@P\d+@@/g, "").trim()).filter(Boolean);
+  const out: { stem: string; correct: string }[] = [];
+  let stemLines: string[] = [];
+  const pushQA = (stemTail: string, answer: string) => {
+    const stem = clean([...stemLines, stemTail].join(" "))
+      .replace(/^\d+\s*[.)]\s*/, "")
+      .replace(/^Question\s*\d*\s*:?\s*/i, "");
+    const correct = stripAnswerMark(answer);
+    if (stem && correct) out.push({ stem, correct });
+    stemLines = [];
+  };
+  for (const line of lines) {
+    const mark = line.indexOf("✅");
+    if (mark >= 0) {
+      // Antes del ✅ puede venir el enunciado (misma línea) y/o un "Answer:".
+      const before = clean(line.slice(0, mark).replace(/Answer\s*:/i, ""));
+      pushQA(before, line.slice(mark + 1));
+    } else if (/^Answer\s*:/i.test(line)) {
+      pushQA("", line);
+    } else {
+      stemLines.push(line);
     }
-  });
+  }
+  return out;
+}
+
+function parseListeningSection(content: string): McqItem[] {
+  const items: McqItem[] = [];
+  let idn = 0;
+  // Divide en bloques de audio: Parte 1 ("Audio N") y Parte 2/3
+  // ("Audio content N", "N Audio content").
+  const blocks = content
+    .split(/(?:\d+\s+Audio\s+content|Audio\s+content\s*\d*|Audio\s*\d+)/i)
+    .slice(1);
+
+  for (const b of blocks) {
+    const checks = (b.match(/✅/g) || []).length;
+    const multi = checks > 1 || /Questions?\s*and\s*answers/i.test(b);
+
+    if (!multi) {
+      // Parte 1: un audio, una pregunta.
+      const qi = b.search(/Question\s*:/i);
+      const ai = b.search(/Answer\s*:/i);
+      if (qi < 0 || ai < 0) continue;
+      const transcript = cleanTranscript(b.slice(0, qi));
+      const stem = clean(b.slice(qi, ai).replace(/Question\s*:/i, ""));
+      const correct = stripAnswerMark(b.slice(ai).split("\n")[0]);
+      if (stem && correct) {
+        items.push({ id: `l${++idn}`, stem, options: [correct], correctIndex: 0, transcript });
+      }
+      continue;
+    }
+
+    // Parte 2/3: un audio, varias preguntas. El guion se asigna solo a la 1ª
+    // pregunta (para reproducir el audio una vez en el modo "audio completo").
+    const split = b.search(/Questions?\s*and\s*answers|Question\s*\d+\s*:/i);
+    const transcript = cleanTranscript(split >= 0 ? b.slice(0, split) : b);
+    const qaPart = (split >= 0 ? b.slice(split) : b).replace(/Questions?\s*and\s*answers/i, "");
+    const qs = parseMultiQA(qaPart);
+    qs.forEach((q, k) => {
+      items.push({
+        id: `l${++idn}`,
+        stem: q.stem,
+        options: [q.correct],
+        correctIndex: 0,
+        ...(k === 0 && transcript ? { transcript } : {}),
+      });
+    });
+  }
   return items;
 }
 

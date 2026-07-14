@@ -48,4 +48,66 @@ Answer: B. one hemisphere at a time`;
     );
     expect(reading?.passages?.[1].title).toMatch(/dolphins/i);
   });
+
+  it("Listening Parte 2/3: un audio con varias preguntas (✅ en misma línea)", () => {
+    const text = `LISTENING
+Audio 1
+WOMAN: Nice bag.
+Question: What does the woman like?
+Answer: ✅ The bag.
+
+Parte 2
+Audio content 1
+Student: Is the movie night still on?
+Coordinator: Yes, unless it storms.
+Questions and answers
+Why is the student calling?✅ To ask if the event is still happening.
+What happens if it storms?✅ It will be postponed.`;
+    const { sections } = parseExam(text);
+    const listening = sections.find((s) => s.kind === "listening");
+    // 1 (Parte 1) + 2 (Parte 2) = 3 preguntas.
+    expect(listening?.items?.length).toBe(3);
+    expect(listening?.items?.[1].stem).toMatch(/why is the student calling/i);
+    expect(listening?.items?.[1].options[listening!.items![1].correctIndex]).toContain(
+      "still happening"
+    );
+    // El guion del audio va SOLO en la primera pregunta del grupo.
+    expect(listening?.items?.[1].transcript).toMatch(/Student: Is the movie/);
+    expect(listening?.items?.[2].transcript).toBeUndefined();
+  });
+
+  it("Listening Parte 3: preguntas numeradas con respuesta en la línea siguiente", () => {
+    const text = `LISTENING
+Parte 3
+Audio content 1
+Speaker: Welcome, new volunteers. Here is your schedule.
+Questions and answers
+1. What is the speaker's main purpose?
+✅ to explain the volunteers' responsibilities
+2. What will the volunteers do first?
+✅ tour the building`;
+    const { sections } = parseExam(text);
+    const listening = sections.find((s) => s.kind === "listening");
+    expect(listening?.items?.length).toBe(2);
+    expect(listening?.items?.[0].stem).toMatch(/main purpose/i);
+    expect(listening?.items?.[0].options[0]).toContain("responsibilities");
+    expect(listening?.items?.[1].options[0]).toContain("tour the building");
+  });
+
+  it("Listening del PDF: el checkbox llega como carácter de reemplazo (�)", () => {
+    // En el PDF real el ✅ se extrae como U+FFFD; el parser lo normaliza.
+    const text = `LISTENING
+Audio content 1
+Professor: Let's talk about your homework.
+Questions and answers
+1. What is the conversation about?
+�\t� a request to stop doing some work
+2. What does the professor allow?
+�\t� skipping the homework`;
+    const { sections } = parseExam(text);
+    const listening = sections.find((s) => s.kind === "listening");
+    expect(listening?.items?.length).toBe(2);
+    expect(listening?.items?.[0].options[0]).toContain("stop doing some work");
+    expect(listening?.items?.[1].options[0]).toContain("skipping the homework");
+  });
 });
