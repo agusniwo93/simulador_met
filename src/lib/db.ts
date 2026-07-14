@@ -15,6 +15,17 @@ import type {
 } from "./types";
 import { DEFAULT_THEME, DEFAULT_EXAM_CONFIG } from "./types";
 import { SEED_SECTIONS, SEED_TITLE, SEED_DURATION, SEED_ID, SEED_VERSION } from "./exam/seed-exam";
+import SEED_EXTRA from "./exam/seed-extra.json";
+
+// Exámenes semilla adicionales (SILUMADOR/SIMULADOR 1,2,3,5,6). El 4 lo cubre
+// SEED_SECTIONS (con imágenes). Súbelo cuando cambie el contenido.
+const SEED_EXTRA_VERSION = 1;
+const SEED_EXTRA_EXAMS = SEED_EXTRA as unknown as {
+  id: string;
+  title: string;
+  durationMinutes: number;
+  sections: Section[];
+}[];
 
 // Base de datos en archivo (demo). Exámenes y resultados — sin cuentas.
 const DATA_DIR = path.join(process.cwd(), "data");
@@ -434,6 +445,25 @@ function seed() {
         sections: expandListeningDistractors(SEED_SECTIONS),
         createdAt: new Date().toISOString(),
         seedVersion: SEED_VERSION,
+      });
+    }
+
+    // Semillas adicionales (1,2,3,5,6). Se migran por versión y no se duplican;
+    // no tocan exámenes subidos por el admin ni los resultados.
+    db.exams = db.exams.filter(
+      (e) =>
+        !(SEED_EXTRA_EXAMS.some((x) => x.id === e.id) &&
+          (e.seedVersion == null || e.seedVersion < SEED_EXTRA_VERSION))
+    );
+    for (const x of SEED_EXTRA_EXAMS) {
+      if (db.exams.some((e) => e.id === x.id)) continue;
+      db.exams.push({
+        id: x.id,
+        title: x.title,
+        durationMinutes: x.durationMinutes,
+        sections: expandListeningDistractors(x.sections),
+        createdAt: new Date().toISOString(),
+        seedVersion: SEED_EXTRA_VERSION,
       });
     }
   });
