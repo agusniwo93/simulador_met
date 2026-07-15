@@ -169,21 +169,30 @@ function splitExamSections(
 }
 
 function parseWritingSection(content: string): WritingTask[] {
-  const lines = content.split("\n").map((l) => l.trim()).filter(Boolean);
-  const prompts: string[] = [];
-  let acc: string[] = [];
-  for (const l of lines) {
-    acc.push(l);
-    if (/\?\s*$/.test(l)) {
-      prompts.push(acc.join(" "));
-      acc = [];
+  // El Writing son varias preguntas guía CORTAS (cada una su tarea, ~20 palabras)
+  // y un ENSAYO final largo (~150). Se separan por párrafos: el párrafo largo es
+  // el ensayo; los cortos se dividen en preguntas individuales por "?".
+  const paras = content.split(/\n+/).map((p) => clean(p)).filter(Boolean);
+  const prompts: { text: string; min: number }[] = [];
+  const addShort = (seg: string) => {
+    const t = clean(seg);
+    if (t.length <= 3) return;
+    // Fragmentos muy cortos ("Why?", "How?") se unen a la pregunta anterior.
+    const prev = prompts[prompts.length - 1];
+    if (t.length < 8 && prev && prev.min === 20) prev.text += " " + t;
+    else prompts.push({ text: t, min: 20 });
+  };
+  for (const para of paras) {
+    if (para.length > 140) {
+      prompts.push({ text: para, min: 150 }); // ensayo
+      continue;
     }
+    // Cada pregunta ("...?") es una tarea; el resto sin "?" (p. ej. "Tell us….")
+    // también.
+    for (const q of para.match(/[^?]+\?/g) ?? []) addShort(q);
+    addShort(para.replace(/[^?]+\?/g, ""));
   }
-  if (acc.length) prompts.push(acc.join(" "));
-  return prompts
-    .map((p) => clean(p))
-    .filter(Boolean)
-    .map((prompt, i) => ({ id: `w${i + 1}`, prompt, minWords: prompt.length > 140 ? 150 : 20 }));
+  return prompts.map((p, i) => ({ id: `w${i + 1}`, prompt: p.text, minWords: p.min }));
 }
 
 // Limpia el guion de un audio (quita centinelas, "PARTE N" y el número de audio
@@ -457,10 +466,6 @@ function parseSpeakingSection(
     end: (m.index as number) + m[0].length,
   }));
   const tasks: SpeakingTask[] = [];
-  // .docx: la foto de Speaking (Task 1 "describe la imagen") viene aparte.
-  if (pictureUrl) {
-    tasks.push({ id: "sp1", prompt: "Task 1 — Describe the picture.", imageUrl: pictureUrl });
-  }
   for (let i = 0; i < marks.length; i++) {
     const block = content.slice(marks[i].end, i + 1 < marks.length ? marks[i + 1].start : content.length);
     const prompt = clean(block);
@@ -468,6 +473,18 @@ function parseSpeakingSection(
     const page = pageInContent(content, marks[i].start, startPage);
     const imageUrl = imagesByPage[page]?.shift();
     tasks.push({ id: `sp${tasks.length + 1}`, prompt, ...(imageUrl ? { imageUrl } : {}) });
+  }
+  // .docx: la foto de Speaking. Si ya existe una tarea "describe la imagen" sin
+  // foto, se le adjunta (evita duplicar la tarea); si no, se antepone.
+  if (pictureUrl) {
+    const existing = tasks.find((t) => !t.imageUrl && /describ\w*\s+the\s+picture|describ\w*\s+la\s+imagen/i.test(t.prompt));
+    if (existing) {
+      existing.imageUrl = pictureUrl;
+      existing.prompt = "Describe the picture.";
+    } else {
+      tasks.unshift({ id: "sp1", prompt: "Describe the picture.", imageUrl: pictureUrl });
+    }
+    tasks.forEach((t, i) => (t.id = `sp${i + 1}`));
   }
   return tasks;
 }

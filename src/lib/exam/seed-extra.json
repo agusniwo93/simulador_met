@@ -10,17 +10,27 @@
         "writingTasks": [
           {
             "id": "w1",
-            "prompt": "Do you enjoy cooking? How often do you cook?",
+            "prompt": "Do you enjoy cooking?",
             "minWords": 20
           },
           {
             "id": "w2",
-            "prompt": "What is a dish you like to prepare?",
+            "prompt": "How often do you cook?",
             "minWords": 20
           },
           {
             "id": "w3",
-            "prompt": "Tell us about a meal you cooked recently In recent years, many companies have adopted a permanent remote work policy, allowing employees to work from home indefinitely. However, some argue that working in a traditional office is essential for collaboration, creativity, and company culture. What is your opinion?",
+            "prompt": "What is a dish you like to prepare?",
+            "minWords": 20
+          },
+          {
+            "id": "w4",
+            "prompt": "Tell us about a meal you cooked recently",
+            "minWords": 20
+          },
+          {
+            "id": "w5",
+            "prompt": "In recent years, many companies have adopted a permanent remote work policy, allowing employees to work from home indefinitely. However, some argue that working in a traditional office is essential for collaboration, creativity, and company culture. What is your opinion?",
             "minWords": 150
           }
         ]
@@ -1128,7 +1138,7 @@
         "speakingTasks": [
           {
             "id": "sp1",
-            "prompt": "Task 1 — Describe the picture.",
+            "prompt": "Describe the picture.",
             "imageUrl": "/seed/met1/img7.webp"
           },
           {
@@ -1162,17 +1172,27 @@
         "writingTasks": [
           {
             "id": "w1",
-            "prompt": "Who was your favorite teacher in school? What subject did he or she teach?",
+            "prompt": "Who was your favorite teacher in school?",
             "minWords": 20
           },
           {
             "id": "w2",
-            "prompt": "What did you like about his or her teaching style?",
+            "prompt": "What subject did he or she teach?",
             "minWords": 20
           },
           {
             "id": "w3",
-            "prompt": "Tell us about a lesson you remember from this teacher. High schools in many countries are now requiring students to complete a certain number of unpaid community service hours in order to graduate. What are the advantages and disadvantages of this compulsory requirement?",
+            "prompt": "What did you like about his or her teaching style?",
+            "minWords": 20
+          },
+          {
+            "id": "w4",
+            "prompt": "Tell us about a lesson you remember from this teacher.",
+            "minWords": 20
+          },
+          {
+            "id": "w5",
+            "prompt": "High schools in many countries are now requiring students to complete a certain number of unpaid community service hours in order to graduate. What are the advantages and disadvantages of this compulsory requirement?",
             "minWords": 150
           }
         ]
@@ -2256,7 +2276,7 @@
         "speakingTasks": [
           {
             "id": "sp1",
-            "prompt": "Task 1 — Describe the picture.",
+            "prompt": "Describe the picture.",
             "imageUrl": "/seed/met2/img7.webp"
           },
           {
@@ -2290,12 +2310,27 @@
         "writingTasks": [
           {
             "id": "w1",
-            "prompt": "What is your favorite movie? How many times have you watched i Why do you like this movie so much?",
+            "prompt": "What is your favorite movie?",
             "minWords": 20
           },
           {
             "id": "w2",
-            "prompt": "Tell us about the last time you watched it. When traveling for vacation, some people prefer to plan every single detail of their itinerary in advance. Others prefer to be completely spontaneous and make decisions day by day. Which travel style do you think is better and why?",
+            "prompt": "How many times have you watched i",
+            "minWords": 20
+          },
+          {
+            "id": "w3",
+            "prompt": "Why do you like this movie so much?",
+            "minWords": 20
+          },
+          {
+            "id": "w4",
+            "prompt": "Tell us about the last time you watched it.",
+            "minWords": 20
+          },
+          {
+            "id": "w5",
+            "prompt": "When traveling for vacation, some people prefer to plan every single detail of their itinerary in advance. Others prefer to be completely spontaneous and make decisions day by day. Which travel style do you think is better and why?",
             "minWords": 150
           }
         ]
@@ -3395,7 +3430,7 @@
         "speakingTasks": [
           {
             "id": "sp1",
-            "prompt": "Task 1 — Describe the picture.",
+            "prompt": "Describe the picture.",
             "imageUrl": "/seed/met3/img7.webp"
           },
           {
@@ -4523,27 +4558,23 @@
         "speakingTasks": [
           {
             "id": "sp1",
-            "prompt": "Task 1 — Describe the picture.",
+            "prompt": "Describe the picture.",
             "imageUrl": "/seed/met5/img7.webp"
           },
           {
             "id": "sp2",
-            "prompt": ". Describe the picture"
-          },
-          {
-            "id": "sp3",
             "prompt": "Tell me about a time when you visited a garden, park, or outdoor place with plants."
           },
           {
-            "id": "sp4",
+            "id": "sp3",
             "prompt": "Some people like spending time outdoors doing activities such as gardening or walking in a park. Others prefer staying indoors and doing activities at home. Which do you prefer? Give your opinion and reasons to support it."
           },
           {
-            "id": "sp5",
+            "id": "sp4",
             "prompt": "Your city is planning to create a community garden where neighbors can grow flowers, fruits, and vegetables together. They want volunteers to help take care of it during the weekends. What are the advantages and disadvantages of this idea?"
           },
           {
-            "id": "sp6",
+            "id": "sp5",
             "prompt": "A local school is planning to replace part of its playground with a garden where students can learn about plants and healthy food. Some parents think students should use that space only for sports and games. I am on the school board. Tell me what you think about this and try to convince me to agree with you. ."
           }
         ]
@@ -4571,7 +4602,12 @@
           },
           {
             "id": "w3",
-            "prompt": "Tell us about the last time you went shopping there. Some governments spend significant parts of their budgets on space exploration. However, some people think this money would be better spent on issues here on Earth. What is your opinion?",
+            "prompt": "Tell us about the last time you went shopping there.",
+            "minWords": 20
+          },
+          {
+            "id": "w4",
+            "prompt": "Some governments spend significant parts of their budgets on space exploration. However, some people think this money would be better spent on issues here on Earth. What is your opinion?",
             "minWords": 150
           }
         ]
@@ -5617,27 +5653,23 @@
         "speakingTasks": [
           {
             "id": "sp1",
-            "prompt": "Task 1 — Describe the picture.",
+            "prompt": "Describe the picture.",
             "imageUrl": "/seed/met6/img7.webp"
           },
           {
             "id": "sp2",
-            "prompt": "Describe the picture"
-          },
-          {
-            "id": "sp3",
             "prompt": "Tell me about a time when you joined a club, class, or activity after school."
           },
           {
-            "id": "sp4",
+            "id": "sp3",
             "prompt": "Some people prefer creative activities, such as drawing or playing music. Others prefer activities that involve games or sports. Which type of activity do you prefer? Give your opinion and reasons to support it."
           },
           {
-            "id": "sp5",
+            "id": "sp4",
             "prompt": "Your school is planning to open a new activity room where students can practice music, draw, play games, and study after classes. They want students to help organize the room and decide the rules. What are the advantages and disadvantages of this idea?"
           },
           {
-            "id": "sp6",
+            "id": "sp5",
             "prompt": "A local school is planning to make all students join at least one after-school club, such as music, art, reading, or board games. Some students think clubs should be optional because they already have homework and other responsibilities. I am the school principal. Tell me what you think about this and try to convince me to agree with you."
           }
         ]

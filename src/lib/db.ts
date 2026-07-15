@@ -19,7 +19,7 @@ import SEED_EXTRA from "./exam/seed-extra.json";
 
 // Exámenes semilla adicionales (SILUMADOR/SIMULADOR 1,2,3,5,6). El 4 lo cubre
 // SEED_SECTIONS (con imágenes). Súbelo cuando cambie el contenido.
-const SEED_EXTRA_VERSION = 2; // v2: anuncios de Reading + foto de Speaking (imágenes)
+const SEED_EXTRA_VERSION = 3; // v3: Writing por preguntas + Speaking sin foto duplicada
 const SEED_EXTRA_EXAMS = SEED_EXTRA as unknown as {
   id: string;
   title: string;

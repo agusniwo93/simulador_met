@@ -94,6 +94,32 @@ Questions and answers
     expect(listening?.items?.[1].options[0]).toContain("tour the building");
   });
 
+  it("Writing: separa cada pregunta guía en una tarea y el ensayo aparte", () => {
+    const text = `WRITING
+What is your favorite movie? How many times have you watched it?
+Why do you like it? Why?
+Tell us about the last time you watched it.
+Some people prefer to plan every detail of a trip in advance, while others prefer to be spontaneous and decide day by day. Which travel style is better and why?
+
+LISTENING
+Audio 1
+WOMAN: Nice.
+Question: What?
+Answer: ✅ A bag.`;
+    const { sections } = parseExam(text);
+    const writing = sections.find((s) => s.kind === "writing");
+    const tasks = writing?.writingTasks ?? [];
+    // 4 preguntas cortas + 1 ensayo (el "Why?" suelto se une a la anterior).
+    const shorts = tasks.filter((t) => t.minWords === 20);
+    const essays = tasks.filter((t) => t.minWords >= 150);
+    expect(essays.length).toBe(1);
+    expect(essays[0].prompt).toMatch(/travel style/i);
+    expect(shorts.length).toBe(4);
+    expect(tasks.every((t) => t.prompt.trim().length > 3)).toBe(true);
+    // No debe quedar un "Why?" como tarea propia.
+    expect(tasks.some((t) => /^why\??$/i.test(t.prompt.trim()))).toBe(false);
+  });
+
   it("Reading/Speaking del .docx: anuncios con imagen (marcador @@IMG@@) y opciones apelmazadas", () => {
     const text = `READING
 This passage is about cats.
