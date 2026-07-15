@@ -15,11 +15,12 @@ import type {
 } from "./types";
 import { DEFAULT_THEME, DEFAULT_EXAM_CONFIG } from "./types";
 import { SEED_SECTIONS, SEED_TITLE, SEED_DURATION, SEED_ID, SEED_VERSION } from "./exam/seed-exam";
+import { expandListeningDistractors } from "./exam/distractors";
 import SEED_EXTRA from "./exam/seed-extra.json";
 
 // Exámenes semilla adicionales (SILUMADOR/SIMULADOR 1,2,3,5,6). El 4 lo cubre
 // SEED_SECTIONS (con imágenes). Súbelo cuando cambie el contenido.
-const SEED_EXTRA_VERSION = 3; // v3: Writing por preguntas + Speaking sin foto duplicada
+const SEED_EXTRA_VERSION = 4; // v4: distractores de Listening por longitud parecida
 const SEED_EXTRA_EXAMS = SEED_EXTRA as unknown as {
   id: string;
   title: string;
@@ -68,54 +69,6 @@ function update<T>(fn: (db: DB) => T): T {
   const result = fn(db);
   write(db);
   return result;
-}
-
-// ---------- Distractores de Listening ----------
-
-// PRNG determinista a partir de una cadena (mulberry32).
-function seededRandom(seedStr: string): () => number {
-  let h = 1779033703 ^ seedStr.length;
-  for (let i = 0; i < seedStr.length; i++) {
-    h = Math.imul(h ^ seedStr.charCodeAt(i), 3432918353);
-    h = (h << 13) | (h >>> 19);
-  }
-  let a = h >>> 0;
-  return () => {
-    a |= 0;
-    a = (a + 0x6d2b79f5) | 0;
-    let t = Math.imul(a ^ (a >>> 15), 1 | a);
-    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-}
-
-// Para listening, las preguntas vienen con solo la respuesta correcta.
-// Generamos 3 distractores tomando respuestas de otras preguntas de la sección.
-function expandListeningDistractors(sections: Section[]): Section[] {
-  return sections.map((section) => {
-    if (section.kind !== "listening" || !section.items) return section;
-    const pool = Array.from(new Set(section.items.map((it) => it.options[0]).filter(Boolean)));
-    const items = section.items.map((item) => {
-      if (item.options.length >= 4) return item;
-      const correct = item.options[0];
-      const rng = seededRandom(item.id + correct);
-      const candidates = pool.filter((a) => a !== correct);
-      // Barajar candidatos de forma determinista y tomar 3.
-      for (let i = candidates.length - 1; i > 0; i--) {
-        const j = Math.floor(rng() * (i + 1));
-        [candidates[i], candidates[j]] = [candidates[j], candidates[i]];
-      }
-      const distractors = candidates.slice(0, 3);
-      const options = [correct, ...distractors];
-      // Barajar las opciones finales.
-      for (let i = options.length - 1; i > 0; i--) {
-        const j = Math.floor(rng() * (i + 1));
-        [options[i], options[j]] = [options[j], options[i]];
-      }
-      return { ...item, options, correctIndex: options.indexOf(correct) };
-    });
-    return { ...section, items };
-  });
 }
 
 // ---------- Exámenes ----------

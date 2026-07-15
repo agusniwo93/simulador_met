@@ -3,7 +3,7 @@ import type { Section } from "../types";
 export const SEED_TITLE = "Simulador MET 4";
 export const SEED_DURATION = 90; // minutos
 export const SEED_ID = "seed-met-4"; // id estable para poder re-sembrar sin duplicar
-export const SEED_VERSION = 4; // súbelo cuando cambie el contenido del seed
+export const SEED_VERSION = 5; // v5: distractores de Listening por longitud parecida
 
 export const SEED_SECTIONS: Section[] = [
   // ---------------------------------------------------------------------------
