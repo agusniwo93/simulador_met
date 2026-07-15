@@ -515,7 +515,7 @@ export default function ExamRunPage() {
           <div className="flex min-w-0 items-center gap-3">
             <div className="leading-tight">
               <span className="text-base font-bold italic text-slate-100 sm:text-lg">
-                Exam<span className="text-cyan-400">Bridge</span>{" "}
+                Learning<span className="font-light not-italic text-cyan-400">English</span>{" "}
                 <span className="not-italic text-cyan-400">MET</span>
               </span>
               <p className="hidden truncate text-[11px] font-medium uppercase tracking-[0.18em] text-slate-400 sm:block">
