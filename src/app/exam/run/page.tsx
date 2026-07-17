@@ -63,6 +63,16 @@ function formatTime(totalSeconds: number, showHours: boolean): string {
   return `${m}:${String(sec).padStart(2, "0")}`;
 }
 
+function speakingTaskType(index: number): string {
+  return [
+    "Describe the picture",
+    "Talk about a personal experience",
+    "Give your opinion",
+    "Discuss advantages and disadvantages",
+    "Convince the listener",
+  ][index] ?? "Speaking response";
+}
+
 type Phase = "loading" | "no-exam" | "name-gate" | "exam";
 
 // Valor de una respuesta: texto (writing) o índice de opción (mcq).
@@ -78,6 +88,7 @@ export default function ExamRunPage() {
   const [nameInput, setNameInput] = useState("");
   const [answers, setAnswers] = useState<Record<string, AnswerValue>>({});
   const [activeSection, setActiveSection] = useState(0);
+  const [activeSpeakingTask, setActiveSpeakingTask] = useState(0);
   const [secondsRemaining, setSecondsRemaining] = useState<number | null>(null);
   const [config, setConfig] = useState<ExamConfig>(DEFAULT_EXAM_CONFIG);
   const [played, setPlayed] = useState<string[]>([]);
@@ -274,6 +285,7 @@ export default function ExamRunPage() {
   // Al cambiar de sección, detener el listening en curso.
   useEffect(() => {
     listen.stop();
+    setActiveSpeakingTask(0);
   }, [activeSection, listen.stop]);
 
   // Al ENTRAR a la sección de Listening, reproducir automáticamente todo el
@@ -793,44 +805,116 @@ export default function ExamRunPage() {
               )}
 
               {/* ----- SPEAKING ----- */}
-              {current.kind === "speaking" && (
-                <div className="mt-6 space-y-6">
-                  <div className="rounded-2xl border border-indigo-400/20 bg-indigo-400/5 p-4 text-sm text-slate-300">
-                    🎙️ {t("exam.speakingHint")}
-                  </div>
-                  {(current.speakingTasks ?? []).map((task, n) => (
-                    <div key={task.id} className="glass glow-ring rounded-3xl p-5 sm:p-7">
-                      <h3 className="text-sm font-bold uppercase tracking-wide text-slate-300">
-                        {t("exam.task")} {n + 1}
-                      </h3>
-                      <div className="mt-3 rounded-2xl border border-cyan-400/20 bg-cyan-400/5 p-4 sm:p-5">
-                        <p className="whitespace-pre-line text-sm leading-relaxed text-slate-200">
-                          {task.prompt}
-                        </p>
-                      </div>
-                      {task.imageUrl && (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img
-                          src={task.imageUrl}
-                          alt={task.prompt}
-                          className="mt-4 w-full rounded-2xl border border-white/10 bg-white"
-                        />
-                      )}
-                      <SpeakingRecorder
-                        key={task.id}
-                        existingUrl={
-                          typeof answers[task.id] === "string" ? (answers[task.id] as string) : null
-                        }
-                        onUploaded={(url) => setSpeaking(task.id, url)}
-                        promptText={task.prompt}
-                        limitSeconds={n < 2 ? 60 : 90}
-                        t={t}
-                      />
-                    </div>
-                  ))}
-                </div>
-              )}
+              {current.kind === "speaking" &&
+                (() => {
+                  const tasks = current.speakingTasks ?? [];
+                  const taskIndex = Math.min(activeSpeakingTask, Math.max(0, tasks.length - 1));
+                  const task = tasks[taskIndex];
+                  if (!task) return null;
+                  const existingUrl = typeof answers[task.id] === "string" ? (answers[task.id] as string) : null;
+                  const isLastTask = taskIndex >= tasks.length - 1;
+                  const recordedCount = tasks.filter(
+                    (tk) => typeof answers[tk.id] === "string" && answers[tk.id]
+                  ).length;
+                  return (
+                    <div className="mt-6 space-y-6">
+                      <div className="glass glow-ring rounded-3xl p-5 sm:p-7">
+                        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                          <div>
+                            <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-cyan-400/80">
+                              {t("exam.task")} {taskIndex + 1} / {tasks.length}
+                            </p>
+                            <h3 className="mt-1 text-xl font-bold text-slate-100">
+                              {speakingTaskType(taskIndex)}
+                            </h3>
+                            <p className="mt-2 max-w-2xl text-sm leading-relaxed text-slate-400">
+                              {t("exam.speakingHint")}
+                            </p>
+                          </div>
+                          <div className="shrink-0 rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3 text-sm text-slate-300">
+                            <span className="font-bold text-cyan-300">{recordedCount}</span> / {tasks.length}{" "}
+                            {t("exam.recorded")}
+                          </div>
+                        </div>
 
+                        <div className="mt-5 grid gap-4 lg:grid-cols-[1fr_18rem]">
+                          <div className="rounded-2xl border border-cyan-400/20 bg-cyan-400/5 p-4 sm:p-5">
+                            <p className="whitespace-pre-line text-base font-medium leading-relaxed text-slate-100">
+                              {task.prompt}
+                            </p>
+                          </div>
+                          <div className="rounded-2xl border border-white/10 bg-slate-950/40 p-4 text-sm text-slate-300">
+                            <p className="font-semibold text-slate-100">{t("exam.sectionTime")}</p>
+                            <p className="mt-2 text-xs leading-relaxed text-slate-400">
+                              The prompt is read aloud first. Recording starts automatically and stops when the timer reaches 0.
+                            </p>
+                            <div className="mt-3 rounded-xl bg-white/5 px-3 py-2 text-xs font-semibold text-cyan-200">
+                              Response time: {taskIndex < 2 ? "60" : "90"}s
+                            </div>
+                          </div>
+                        </div>
+
+                        {task.imageUrl && (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img
+                            src={task.imageUrl}
+                            alt={task.prompt}
+                            className="mt-5 w-full rounded-2xl border border-white/10 bg-white"
+                          />
+                        )}
+
+                        <SpeakingRecorder
+                          key={task.id}
+                          existingUrl={existingUrl}
+                          onUploaded={(url) => setSpeaking(task.id, url)}
+                          promptText={task.prompt}
+                          limitSeconds={taskIndex < 2 ? 60 : 90}
+                          t={t}
+                        />
+
+                        <div className="mt-6 flex flex-wrap items-center justify-between gap-3 border-t border-white/10 pt-5">
+                          <div className="flex gap-2">
+                            {tasks.map((tk, i) => {
+                              const done = typeof answers[tk.id] === "string" && answers[tk.id];
+                              return (
+                                <button
+                                  key={tk.id}
+                                  type="button"
+                                  onClick={() => setActiveSpeakingTask(i)}
+                                  className={`h-9 w-9 rounded-full text-xs font-bold transition ${
+                                    i === taskIndex
+                                      ? "bg-gradient-to-br from-cyan-500 to-indigo-600 text-white"
+                                      : done
+                                      ? "border border-emerald-400/30 bg-emerald-400/15 text-emerald-300"
+                                      : "border border-white/10 bg-white/5 text-slate-400"
+                                  }`}
+                                  aria-label={`Speaking task ${i + 1}`}
+                                >
+                                  {i + 1}
+                                </button>
+                              );
+                            })}
+                          </div>
+
+                          {!isLastTask ? (
+                            <button
+                              type="button"
+                              onClick={() => setActiveSpeakingTask((i) => Math.min(i + 1, tasks.length - 1))}
+                              disabled={!existingUrl}
+                              className="btn-primary rounded-2xl px-5 py-2.5 text-sm font-bold disabled:cursor-not-allowed disabled:opacity-50"
+                            >
+                              {t("exam.next")} {t("exam.task")}
+                            </button>
+                          ) : (
+                            <span className="rounded-full border border-emerald-400/30 bg-emerald-400/15 px-4 py-2 text-xs font-bold text-emerald-300">
+                              {recordedCount === tasks.length ? t("exam.recorded") : t("exam.speakingHint")}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })()}
               {/* ----- Navegación (secuencial: solo avanzar) ----- */}
               <div className="mt-8 flex items-center justify-end gap-3">
                 {activeSection < totalSections - 1 ? (

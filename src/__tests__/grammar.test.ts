@@ -38,13 +38,14 @@ describe("countWords", () => {
 describe("gradeWriting", () => {
   it("gives a perfect score for a long, clean answer", async () => {
     vi.stubGlobal("fetch", mockFetch([]));
-    const answer = Array(30).fill("word").join(" "); // 30 words
+    const answer =
+      "I usually study in the evening because my house is quiet and I can focus better after dinner with enough time.";
     const grade = await gradeWriting(task(20), answer, "en");
 
     expect(grade.score).toBe(100);
     expect(grade.meetsLength).toBe(true);
     expect(grade.issues).toEqual([]);
-    expect(grade.wordCount).toBe(30);
+    expect(grade.wordCount).toBe(21);
   });
 
   it("returns score 0 for an empty answer", async () => {
@@ -63,6 +64,22 @@ describe("gradeWriting", () => {
     expect(grade.score).toBeLessThanOrEqual(40);
     expect(grade.meetsLength).toBe(false);
     expect(grade.tips.some((t) => t.length > 0)).toBe(true);
+  });
+
+  it("gives almost no credit for short random letters", async () => {
+    vi.stubGlobal("fetch", mockFetch([]));
+    const grade = await gradeWriting(task(20), "jajdsjxjsjx kpkmj hhhhhhhhhhhhh", "en");
+
+    expect(grade.score).toBeLessThanOrEqual(10);
+    expect(grade.tips.some((tip) => tip.includes("Random letters"))).toBe(true);
+  });
+
+  it("does not reward longer gibberish as a real writing response", async () => {
+    vi.stubGlobal("fetch", mockFetch([]));
+    const answer = "jjjjjjjjjjj hhhhhhhhhhhhh gcrtyuubj kpkmj zzzzzzzzzzz bcdffghll qwrtypsdfg";
+    const grade = await gradeWriting(task(20), answer, "en");
+
+    expect(grade.score).toBeLessThanOrEqual(20);
   });
 
   it("increments grammar issue count and lowers the score", async () => {

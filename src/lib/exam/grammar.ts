@@ -84,10 +84,83 @@ const TIPS: Record<Lang, Record<IssueCategory | "lengthShort" | "great", string>
   },
 };
 
+function invalidAnswerTip(lang: Lang): string {
+  return lang === "es"
+    ? "Escribe una respuesta real conectada con la pregunta. Letras al azar o palabras sin relacion reciben muy poco o ningun credito."
+    : "Write a real answer connected to the question. Random letters or unrelated words receive little or no credit.";
+}
+
+function tokenize(text: string): string[] {
+  return text.toLowerCase().match(/[a-z]+(?:'[a-z]+)?/g) ?? [];
+}
+
+function hasRepeatedRun(word: string): boolean {
+  return /(.)\1{3,}/.test(word);
+}
+
+function vowelRatio(word: string): number {
+  if (!word) return 0;
+  const vowels = word.match(/[aeiou]/g)?.length ?? 0;
+  return vowels / word.length;
+}
+
+function promptKeywords(prompt: string): Set<string> {
+  const stop = new Set([
+    "about",
+    "and",
+    "are",
+    "buy",
+    "does",
+    "for",
+    "how",
+    "like",
+    "that",
+    "the",
+    "there",
+    "visit",
+    "what",
+    "when",
+    "where",
+    "which",
+    "who",
+    "why",
+    "with",
+    "would",
+    "you",
+    "your",
+  ]);
+  return new Set(tokenize(prompt).filter((word) => word.length > 2 && !stop.has(word)));
+}
+
+function isLikelyInvalidAnswer(answer: string, prompt: string, wordCount: number): boolean {
+  const words = tokenize(answer);
+  if (wordCount === 0 || words.length === 0) return false;
+
+  const longWords = words.filter((word) => word.length >= 4);
+  const repeatedRunCount = words.filter(hasRepeatedRun).length;
+  const lowVowelCount = longWords.filter((word) => vowelRatio(word) < 0.18).length;
+  const veryLongOddCount = words.filter((word) => word.length >= 12 && (hasRepeatedRun(word) || vowelRatio(word) < 0.25)).length;
+  const uniqueRatio = new Set(words).size / words.length;
+  const alphabeticChars = words.join("").length;
+  const promptHits = words.filter((word) => promptKeywords(prompt).has(word)).length;
+
+  const severeTokenProblem =
+    repeatedRunCount >= Math.max(1, Math.ceil(words.length * 0.25)) ||
+    lowVowelCount >= Math.max(2, Math.ceil(longWords.length * 0.5)) ||
+    veryLongOddCount >= 1;
+
+  const tooLittleLanguage = alphabeticChars < 18 && wordCount < 6;
+  const disconnectedShortAnswer = wordCount < 8 && promptHits === 0 && severeTokenProblem;
+  const repeatedGarbage = uniqueRatio < 0.45 && words.length >= 4 && severeTokenProblem;
+
+  return tooLittleLanguage || disconnectedShortAnswer || repeatedGarbage || severeTokenProblem;
+}
+
 export async function gradeWriting(task: WritingTask, answer: string, uiLang: Lang): Promise<WritingGrade> {
   const issues = await checkText(answer);
   const wordCount = countWords(answer);
   const meetsLength = wordCount >= task.minWords;
+  const invalidAnswer = isLikelyInvalidAnswer(answer, task.prompt, wordCount);
 
   const issueCounts = emptyCounts();
   for (const i of issues) issueCounts[i.category]++;
@@ -108,13 +181,15 @@ export async function gradeWriting(task: WritingTask, answer: string, uiLang: La
   }
 
   if (wordCount === 0) score = 0;
+  if (invalidAnswer) score = Math.min(score, wordCount < 8 ? 10 : 20);
   // Una respuesta muy por debajo del mínimo no puede aprobar.
-  if (severelyShort) score = Math.min(score, 40);
+  if (severelyShort) score = Math.min(score, invalidAnswer ? 10 : 40);
   score = Math.max(0, Math.min(100, score));
 
   // Consejos accionables según lo que falló
   const tips: string[] = [];
   const tipSet = TIPS[uiLang];
+  if (invalidAnswer) tips.push(invalidAnswerTip(uiLang));
   if (!meetsLength && task.minWords > 0) tips.push(tipSet.lengthShort);
   if (issueCounts.grammar > 0) tips.push(tipSet.grammar);
   if (issueCounts.spelling > 0) tips.push(tipSet.spelling);
