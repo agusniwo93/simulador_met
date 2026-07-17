@@ -42,13 +42,6 @@ function writeJson(key: string, value: unknown) {
 
 // Une todas las conversaciones del Listening en un solo audio continuo (como el
 // examen real: se reproduce todo de corrido y luego se contesta).
-function buildListeningTranscript(items: { transcript?: string }[]): string {
-  return items
-    .map((it) => it.transcript?.trim())
-    .filter(Boolean)
-    .join("\n\n");
-}
-
 // Cuenta palabras: recorta y separa por espacios; vacío = 0.
 function countWords(text: string): number {
   const trimmed = text.trim();
@@ -205,7 +198,10 @@ export default function ExamRunPage() {
     listen.stop();
     setActiveSection((i) => {
       const last = (exam?.sections.length ?? 1) - 1;
-      if (i < last) return i + 1;
+      const currentKind = exam?.sections[i]?.kind;
+      const nextKind = exam?.sections[i + 1]?.kind;
+      const step = currentKind === "grammar" && nextKind === "reading" ? 2 : 1;
+      if (i + step <= last) return i + step;
       // Última sección: enviar el examen.
       if (!autoSubmitFiredRef.current && !submittingRef.current) {
         autoSubmitFiredRef.current = true;
@@ -223,7 +219,11 @@ export default function ExamRunPage() {
   useEffect(() => {
     if (phase !== "exam" || !exam) return;
     const kind = exam.sections[activeSection]?.kind;
-    const minutes = config.sectionMinutes[kind] ?? 0;
+    const nextKind = exam.sections[activeSection + 1]?.kind;
+    const minutes =
+      kind === "grammar" && nextKind === "reading"
+        ? (config.sectionMinutes.grammar ?? 0) + (config.sectionMinutes.reading ?? 0)
+        : config.sectionMinutes[kind] ?? 0;
     if (!minutes) {
       setSecondsRemaining(null); // 0 = sin límite
       return;
@@ -278,18 +278,6 @@ export default function ExamRunPage() {
 
   // Al ENTRAR a la sección de Listening, reproducir automáticamente todo el
   // audio (todas las conversaciones seguidas), una sola vez.
-  const autoStartedRef = useRef<Set<string>>(new Set());
-  useEffect(() => {
-    if (phase !== "exam" || !exam) return;
-    const sec = exam.sections[activeSection];
-    if (!sec || sec.kind !== "listening") return;
-    const audioId = `listen-${activeSection}`;
-    if (autoStartedRef.current.has(audioId) || played.includes(audioId)) return;
-    autoStartedRef.current.add(audioId);
-    const transcript = buildListeningTranscript(sec.items ?? []);
-    if (transcript) listen.play(audioId, transcript);
-  }, [phase, exam, activeSection, played, listen.play]);
-
   // Marca el audio del Listening como reproducido cuando realmente suena (para
   // no repetir; si iOS bloquea el auto-play, no se marca y queda el botón Play).
   useEffect(() => {
@@ -405,6 +393,21 @@ export default function ExamRunPage() {
 
   const totalSections = exam?.sections.length ?? 0;
   const current = exam?.sections[activeSection] ?? null;
+  const pairedReading =
+    current?.kind === "grammar" && exam?.sections[activeSection + 1]?.kind === "reading"
+      ? exam.sections[activeSection + 1]
+      : null;
+  const displaySections =
+    exam?.sections.filter((s, i, sections) => !(s.kind === "reading" && sections[i - 1]?.kind === "grammar")) ??
+    [];
+  const displaySectionNumber =
+    exam?.sections
+      .slice(0, activeSection)
+      .filter((s, i) => !(s.kind === "reading" && exam.sections[i - 1]?.kind === "grammar"))
+      .length ?? 0;
+  const displayTotalSections = displaySections.length;
+  const displayTitle = pairedReading ? "Grammar and Reading" : current?.title;
+  const displayIntro = pairedReading ? current?.intro || pairedReading.intro : current?.intro;
   const showHours = (exam?.durationMinutes ?? 0) >= 60;
   const lowTime = secondsRemaining != null && secondsRemaining < 300; // < 5 min
 
@@ -560,9 +563,15 @@ export default function ExamRunPage() {
           <div className="flex gap-2">
             {/* Secuencial: las secciones NO son clickeables. Indicador de progreso. */}
             {exam?.sections.map((s, i) => {
+              if (s.kind === "reading" && exam.sections[i - 1]?.kind === "grammar") return null;
               const isActive = i === activeSection;
               const isDone = i < activeSection; // ya cerrada (no se puede volver)
-              const { answered, total } = sectionAnswered(s);
+              const paired = s.kind === "grammar" && exam.sections[i + 1]?.kind === "reading" ? exam.sections[i + 1] : null;
+              const primary = sectionAnswered(s);
+              const secondary = paired ? sectionAnswered(paired) : { answered: 0, total: 0 };
+              const answered = primary.answered + secondary.answered;
+              const total = primary.total + secondary.total;
+              const title = paired ? "Grammar and Reading" : s.title;
               return (
                 <div
                   key={`${s.kind}-${i}`}
@@ -575,7 +584,7 @@ export default function ExamRunPage() {
                   }`}
                 >
                   <span aria-hidden>{isDone ? "✓" : isActive ? "•" : "🔒"}</span>
-                  <span className="max-w-[8rem] truncate sm:max-w-[12rem]">{s.title}</span>
+                  <span className="max-w-[8rem] truncate sm:max-w-[12rem]">{title}</span>
                   {isActive && (
                     <span className="text-white/70">
                       {answered}/{total}
@@ -601,11 +610,11 @@ export default function ExamRunPage() {
             >
               {/* Encabezado de sección */}
               <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-cyan-400/80">
-                {t("exam.section")} {activeSection + 1} / {totalSections}
+                {t("exam.section")} {displaySectionNumber + 1} / {displayTotalSections}
               </p>
-              <h2 className="mt-1.5 text-xl font-bold text-slate-100 sm:text-2xl">{current.title}</h2>
-              {current.intro && (
-                <p className="mt-2 text-sm leading-relaxed text-slate-400">{current.intro}</p>
+              <h2 className="mt-1.5 text-xl font-bold text-slate-100 sm:text-2xl">{displayTitle}</h2>
+              {displayIntro && (
+                <p className="mt-2 text-sm leading-relaxed text-slate-400">{displayIntro}</p>
               )}
 
               {/* ----- WRITING ----- */}
@@ -672,14 +681,14 @@ export default function ExamRunPage() {
                 </div>
               )}
 
-              {/* ----- LISTENING (audio completo + solo preguntas) ----- */}
+              {/* ----- LISTENING (un audio por pregunta) ----- */}
               {current.kind === "listening" &&
                 (() => {
-                  const fullTranscript = buildListeningTranscript(current.items ?? []);
+                  const fullTranscript = "";
                   const audioId = `listen-${activeSection}`;
                   return (
                     <div className="mt-6">
-                      {/* Barra del audio completo (arriba, centrada) */}
+                      {/* El sample oficial muestra un audio asociado a cada pregunta. */}
                       {fullTranscript && (
                         <div className="glass glow-ring flex flex-col items-center gap-3 rounded-3xl p-5 text-center sm:p-6">
                           <p className="text-sm text-slate-300">🎧 {t("exam.listenHint")}</p>
@@ -712,6 +721,24 @@ export default function ExamRunPage() {
                             questionLabel={t("exam.question")}
                             chooseLabel={t("exam.chooseOption")}
                             hideStem={false}
+                            audio={
+                              item.transcript ? (
+                                <ListenControls
+                                  player={listen}
+                                  id={`listen-${item.id}`}
+                                  transcript={item.transcript}
+                                  played={played.includes(`listen-${item.id}`)}
+                                  allowReplay={config.allowListeningReplay}
+                                  onPlay={() => markPlayed(`listen-${item.id}`)}
+                                  labels={{
+                                    listen: t("exam.listenPlay"),
+                                    playing: t("exam.listenPlaying"),
+                                    loading: t("common.loading"),
+                                    played: t("exam.listenPlayed"),
+                                  }}
+                                />
+                              ) : null
+                            }
                           />
                         ))}
                       </div>
@@ -720,9 +747,9 @@ export default function ExamRunPage() {
                 })()}
 
               {/* ----- READING ----- */}
-              {current.kind === "reading" && (
+              {(current.kind === "reading" || pairedReading) && (
                 <div className="mt-6 space-y-8">
-                  {(current.passages ?? []).map((passage) => (
+                  {((pairedReading ?? current).passages ?? []).map((passage) => (
                     <div key={passage.id} className="space-y-5">
                       <div className="glass rounded-3xl p-5 sm:p-6">
                         <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-cyan-400/80">

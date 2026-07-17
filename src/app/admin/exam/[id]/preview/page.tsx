@@ -176,7 +176,7 @@ function SectionPreview({
                 <p className="whitespace-pre-line text-sm leading-relaxed text-slate-200">{task.prompt}</p>
               </div>
               <div className="input-dark mt-4 min-h-[120px] rounded-2xl px-4 py-3 text-sm text-slate-500">
-                (student's answer area)
+                (student&apos;s answer area)
               </div>
               <p className="mt-2 text-xs text-slate-500">Min. {task.minWords} words</p>
               {task.feedbackGuide && (
