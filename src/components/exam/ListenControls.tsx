@@ -4,8 +4,7 @@ import type { useListenPlayer } from "@/lib/tts/useListenPlayer";
 
 type Player = ReturnType<typeof useListenPlayer>;
 
-// Barra de controles del listening estilo Duolingo: play / pausa-reanudar /
-// stop / velocidad (1x · 0.75x · 0.5x).
+// Barra de controles del listening: play / pausa-reanudar / stop.
 export default function ListenControls({
   player,
   id,
@@ -24,8 +23,7 @@ export default function ListenControls({
   onPlay?: () => void;
 }) {
   const active = player.activeId === id;
-  const { status, speed } = player;
-  const speedLabel = speed === 1 ? "1x" : speed === 0.75 ? "0.75x" : "0.5x";
+  const { status } = player;
 
   const pill =
     "inline-flex items-center gap-2 rounded-full bg-gradient-to-r from-cyan-500 to-indigo-600 px-4 py-2 text-xs font-bold text-white shadow-[0_8px_24px_-10px_rgba(99,102,241,0.7)] transition hover:brightness-110 active:scale-95";
@@ -33,7 +31,6 @@ export default function ListenControls({
     "flex h-8 w-8 items-center justify-center rounded-full bg-white/15 text-white transition hover:bg-white/25 active:scale-95";
 
   if (!active) {
-    // Ya reproducido y sin repetición permitida → deshabilitado.
     if (played && !allowReplay) {
       return (
         <span className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-4 py-2 text-xs font-bold text-slate-400">
@@ -73,15 +70,6 @@ export default function ListenControls({
 
       <button onClick={player.stop} className={iconBtn} aria-label="Stop">
         ⏹
-      </button>
-
-      <button
-        onClick={player.cycleSpeed}
-        className="flex h-8 items-center gap-1 rounded-full bg-white/15 px-2.5 text-xs font-bold text-white transition hover:bg-white/25 active:scale-95"
-        aria-label="Speed"
-        title="Speed"
-      >
-        <span aria-hidden>🐢</span> {speedLabel}
       </button>
     </div>
   );

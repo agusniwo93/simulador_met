@@ -2,29 +2,21 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
-  getAudioEl,
   fetchTts,
-  unlockAudio,
-  stopAudio,
+  getAudioEl,
   speakDialogueBrowser,
+  stopAudio,
+  unlockAudio,
 } from "@/lib/tts/player";
 
 export type ListenStatus = "idle" | "loading" | "playing" | "paused";
 
-// Velocidades tipo Duolingo (normal → lento → más lento).
-export const SPEEDS = [1, 0.75, 0.5] as const;
-
-// Controla la reproducción del listening con pausa/reanudar/stop y velocidad.
-// Usa el audio de ElevenLabs si está disponible (controles nativos) y cae a la
-// voz del navegador (pausa/reanudar/stop; el cambio de velocidad re-inicia).
+// Controla la reproduccion del listening con pausa/reanudar/stop a velocidad normal.
 export function useListenPlayer() {
   const [activeId, setActiveId] = useState<string | null>(null);
   const [status, setStatus] = useState<ListenStatus>("idle");
-  const [speed, setSpeed] = useState<number>(1);
 
   const modeRef = useRef<"audio" | "speech" | null>(null);
-  const transcriptRef = useRef<string>("");
-  const speedRef = useRef(1);
   const tokenRef = useRef(0);
 
   const hardStop = useCallback(() => {
@@ -44,16 +36,12 @@ export function useListenPlayer() {
     modeRef.current = "speech";
     setStatus("playing");
     const token = tokenRef.current;
-    speakDialogueBrowser(
-      transcript,
-      () => {
-        if (tokenRef.current === token) {
-          setStatus("idle");
-          setActiveId(null);
-        }
-      },
-      speedRef.current
-    );
+    speakDialogueBrowser(transcript, () => {
+      if (tokenRef.current === token) {
+        setStatus("idle");
+        setActiveId(null);
+      }
+    });
   }, []);
 
   const play = useCallback(
@@ -62,24 +50,23 @@ export function useListenPlayer() {
       unlockAudio();
       hardStop();
       const token = ++tokenRef.current;
-      transcriptRef.current = transcript;
       setActiveId(id);
       setStatus("loading");
       try {
         const url = await fetchTts(transcript, true);
         if (tokenRef.current !== token) return;
-        const a = getAudioEl();
-        a.onended = () => {
+        const audio = getAudioEl();
+        audio.onended = () => {
           if (tokenRef.current === token) {
             setStatus("idle");
             setActiveId(null);
           }
         };
-        a.src = url;
-        a.currentTime = 0;
-        a.playbackRate = speedRef.current;
+        audio.src = url;
+        audio.currentTime = 0;
+        audio.playbackRate = 1;
         modeRef.current = "audio";
-        await a.play();
+        await audio.play();
         if (tokenRef.current === token) setStatus("playing");
       } catch {
         if (tokenRef.current === token) speakBrowser(id, transcript);
@@ -108,21 +95,7 @@ export function useListenPlayer() {
     }
   }, []);
 
-  // Cambia la velocidad. En audio es instantáneo; en la voz del navegador
-  // re-inicia la lectura a la nueva velocidad (no permite cambiarla en vuelo).
-  const cycleSpeed = useCallback(() => {
-    const next = SPEEDS[(SPEEDS.indexOf(speedRef.current as (typeof SPEEDS)[number]) + 1) % SPEEDS.length];
-    speedRef.current = next;
-    setSpeed(next);
-    if (modeRef.current === "audio") {
-      getAudioEl().playbackRate = next;
-    } else if (modeRef.current === "speech" && activeId) {
-      speakBrowser(activeId, transcriptRef.current);
-    }
-  }, [activeId, speakBrowser]);
-
-  // Detener al desmontar (cambiar de sección/página).
   useEffect(() => () => stop(), [stop]);
 
-  return { activeId, status, speed, play, pause, resume, stop, cycleSpeed };
+  return { activeId, status, play, pause, resume, stop };
 }
