@@ -151,7 +151,7 @@ function WritingGradeCard({ grade, t }: { grade: WritingGrade; t: Translate }) {
     <div className="glass rounded-2xl p-5 sm:p-6">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <p className="text-sm font-semibold leading-relaxed text-slate-100">{grade.prompt}</p>
+         {/* <p className="text-sm font-semibold leading-relaxed text-slate-100">{grade.prompt}</p>*/}
           <p className="mt-2 text-xs text-slate-400">
             {grade.wordCount} {t("common.words")} / {t("common.minWords", { n: grade.minWords })}
           </p>
@@ -232,10 +232,12 @@ function McqReviewCard({ grade, index, t }: { grade: McqGrade; index: number; t:
   return (
     <div className="glass rounded-2xl p-4">
       <div className="flex items-start justify-between gap-3">
+        {/*
         <p className="flex-1 whitespace-pre-line text-sm font-medium leading-relaxed text-slate-100">
           <span className="mr-1.5 text-slate-500">{index + 1}.</span>
           {grade.stem}
         </p>
+        */}
         <span
           className={`shrink-0 rounded-full border px-3 py-1 text-xs font-bold ${
             grade.correct
@@ -262,10 +264,12 @@ function McqReviewCard({ grade, index, t }: { grade: McqGrade; index: number; t:
 function SpeakingCard({ response, index, t }: { response: SpeakingResponse; index: number; t: Translate }) {
   return (
     <div className="glass rounded-2xl p-5">
+      {/*
       <p className="text-sm font-medium leading-relaxed text-slate-100">
         <span className="mr-1.5 text-slate-500">{index + 1}.</span>
         {response.prompt}
       </p>
+      */}
       <div className="mt-4">
         <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-slate-500">{t("results.yourRecording")}</p>
         {response.audioUrl ? (
