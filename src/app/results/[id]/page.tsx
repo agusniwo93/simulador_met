@@ -178,15 +178,15 @@ function WritingGradeCard({ grade, t }: { grade: WritingGrade; t: Translate }) {
         ))}
       </div>
 
-      <div className="mt-5">
+      {/*<div className="mt-5">
         <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-slate-500">{t("results.yourAnswer")}</p>
         <div className="max-h-48 overflow-y-auto whitespace-pre-wrap rounded-xl border border-white/10 bg-slate-950/50 p-4 text-sm leading-relaxed text-slate-200">
           {grade.answer.trim() ? grade.answer : "-"}
         </div>
-      </div>
+      </div>*/}
 
-      <div className="mt-5 grid gap-4 lg:grid-cols-2">
-        <div>
+      <div className="mt-5 grid gap-4 lg:grid-cols-1">
+        {/*<div>
           <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">{t("results.issuesFound", { n: grade.issues.length })}</p>
           {visibleIssues.length === 0 ? (
             <p className="rounded-xl border border-emerald-400/20 bg-emerald-400/10 p-3 text-sm text-emerald-300">
@@ -207,7 +207,7 @@ function WritingGradeCard({ grade, t }: { grade: WritingGrade; t: Translate }) {
               ))}
             </ul>
           )}
-        </div>
+        </div>*/}
 
         <div>
           <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">{t("results.tips")}</p>
