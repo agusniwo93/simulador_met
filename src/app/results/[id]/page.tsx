@@ -248,6 +248,7 @@ function McqReviewCard({ grade, index, t }: { grade: McqGrade; index: number; t:
           {grade.correct ? t("results.correct") : t("results.incorrect")}
         </span>
       </div>
+      {/*
       <div className="mt-3 grid gap-2 text-xs sm:grid-cols-2">
         <div className="rounded-xl border border-white/10 bg-white/[0.03] p-3 text-slate-300">
           {t("results.yourChoice")}: <span className="font-semibold text-slate-100">{selected}</span>
@@ -256,7 +257,7 @@ function McqReviewCard({ grade, index, t }: { grade: McqGrade; index: number; t:
           {t("results.correctAnswer")}: <span className="font-semibold">{correct}. {grade.options[grade.correctIndex]}</span>
         </div>
       </div>
-      {grade.selectedIndex == null && <p className="mt-2 text-xs font-semibold text-amber-300">{t("results.notAnswered")}</p>}
+      {grade.selectedIndex == null && <p className="mt-2 text-xs font-semibold text-amber-300">{t("results.notAnswered")}</p>}*/}
     </div>
   );
 }
