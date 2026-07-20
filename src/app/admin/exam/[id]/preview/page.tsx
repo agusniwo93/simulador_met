@@ -9,6 +9,25 @@ import type { Exam, Section, McqItem } from "@/lib/types";
 
 const LETTERS = ["A", "B", "C", "D", "E", "F"];
 
+function isReadingPaired(sections: Section[], index: number): boolean {
+  return sections[index]?.kind === "reading" && sections[index - 1]?.kind === "grammar";
+}
+
+function hasPairedReading(sections: Section[], index: number): boolean {
+  return sections[index]?.kind === "grammar" && sections[index + 1]?.kind === "reading";
+}
+
+function nextPreviewIndex(sections: Section[], index: number): number {
+  const step = hasPairedReading(sections, index) ? 2 : 1;
+  const next = index + step;
+  return next < sections.length ? next : index;
+}
+
+function prevPreviewIndex(sections: Section[], index: number): number {
+  const prev = index - 1;
+  return isReadingPaired(sections, prev) ? Math.max(0, index - 2) : Math.max(0, prev);
+}
+
 export default function ExamPreviewPage() {
   const router = useRouter();
   const params = useParams<{ id: string }>();
@@ -61,6 +80,9 @@ export default function ExamPreviewPage() {
   }
 
   const current = exam.sections[active];
+  const pairedReading = hasPairedReading(exam.sections, active) ? exam.sections[active + 1] : null;
+  const canGoPrev = active > 0;
+  const canGoNext = nextPreviewIndex(exam.sections, active) > active;
 
   return (
     <main className="relative min-h-screen pb-16 text-slate-100">
@@ -102,19 +124,23 @@ export default function ExamPreviewPage() {
         {/* Tabs de secciones */}
         <div className="mx-auto max-w-4xl overflow-x-auto px-4 pb-3 sm:px-6">
           <div className="flex gap-2">
-            {exam.sections.map((s, i) => (
-              <button
-                key={`${s.kind}-${i}`}
-                onClick={() => setActive(i)}
-                className={`shrink-0 rounded-full px-3.5 py-1.5 text-xs font-semibold transition ${
-                  i === active
-                    ? "bg-gradient-to-r from-cyan-500 to-indigo-600 text-white"
-                    : "glass text-slate-300 hover:bg-white/10"
-                }`}
-              >
-                {s.title}
-              </button>
-            ))}
+            {exam.sections.map((s, i) => {
+              if (isReadingPaired(exam.sections, i)) return null;
+              const title = hasPairedReading(exam.sections, i) ? "Grammar and Reading" : s.title;
+              return (
+                <button
+                  key={`${s.kind}-${i}`}
+                  onClick={() => setActive(i)}
+                  className={`shrink-0 rounded-full px-3.5 py-1.5 text-xs font-semibold transition ${
+                    i === active
+                      ? "bg-gradient-to-r from-cyan-500 to-indigo-600 text-white"
+                      : "glass text-slate-300 hover:bg-white/10"
+                  }`}
+                >
+                  {title}
+                </button>
+              );
+            })}
           </div>
         </div>
       </header>
@@ -129,20 +155,20 @@ export default function ExamPreviewPage() {
 
       {/* Cuerpo de la sección */}
       <div className="mx-auto max-w-4xl px-4 py-6 sm:px-6">
-        {current && <SectionPreview section={current} listen={listen} />}
+        {current && <SectionPreview section={current} pairedReading={pairedReading} listen={listen} />}
 
         {/* Navegación */}
         <div className="mt-8 flex items-center justify-between gap-3">
           <button
-            onClick={() => setActive((i) => Math.max(0, i - 1))}
-            disabled={active === 0}
+            onClick={() => setActive((i) => prevPreviewIndex(exam.sections, i))}
+            disabled={!canGoPrev}
             className="glass rounded-2xl px-5 py-2.5 text-sm font-semibold text-slate-200 transition hover:bg-white/10 disabled:opacity-40"
           >
             ← Anterior
           </button>
           <button
-            onClick={() => setActive((i) => Math.min(exam.sections.length - 1, i + 1))}
-            disabled={active >= exam.sections.length - 1}
+            onClick={() => setActive((i) => nextPreviewIndex(exam.sections, i))}
+            disabled={!canGoNext}
             className="btn-primary rounded-2xl px-6 py-2.5 text-sm font-bold disabled:opacity-40"
           >
             Siguiente →
@@ -155,15 +181,20 @@ export default function ExamPreviewPage() {
 
 function SectionPreview({
   section,
+  pairedReading,
   listen,
 }: {
   section: Section;
+  pairedReading: Section | null;
   listen: ReturnType<typeof useListenPlayer>;
 }) {
+  const title = pairedReading ? "Grammar and Reading" : section.title;
+  const readingSection = pairedReading ?? (section.kind === "reading" ? section : null);
+
   return (
     <section>
       <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-cyan-400/80">Section</p>
-      <h2 className="mt-1 text-xl font-bold sm:text-2xl">{section.title}</h2>
+      <h2 className="mt-1 text-xl font-bold sm:text-2xl">{title}</h2>
       {section.intro && <p className="mt-2 text-sm leading-relaxed text-slate-400">{section.intro}</p>}
 
       {/* WRITING */}
@@ -221,9 +252,9 @@ function SectionPreview({
       )}
 
       {/* READING */}
-      {section.kind === "reading" && (
+      {readingSection && (
         <div className="mt-6 space-y-8">
-          {(section.passages ?? []).map((p) => (
+          {(readingSection.passages ?? []).map((p) => (
             <div key={p.id} className="space-y-4">
               <div className="glass rounded-3xl p-5 sm:p-6">
                 <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-cyan-400/80">
