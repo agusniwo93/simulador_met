@@ -879,17 +879,17 @@ export default function ExamRunPage() {
                               return (
                                 <button
                                   key={tk.id}
-                                  type="button"
-                                  onClick={() => setActiveSpeakingTask(i)}
-                                  className={`h-9 w-9 rounded-full text-xs font-bold transition ${
-                                    i === taskIndex
-                                      ? "bg-gradient-to-br from-cyan-500 to-indigo-600 text-white"
-                                      : done
-                                      ? "border border-emerald-400/30 bg-emerald-400/15 text-emerald-300"
-                                      : "border border-white/10 bg-white/5 text-slate-400"
-                                  }`}
-                                  aria-label={`Speaking task ${i + 1}`}
-                                >
+                                    type="button"
+                                    disabled={true} // 🔒 Bloquea el clic para que no puedan saltar
+                                      className={`h-9 w-9 rounded-full text-xs font-bold transition cursor-default ${
+                                                  i === taskIndex
+                                              ? "bg-gradient-to-br from-cyan-500 to-indigo-600 text-white"
+                                                : done
+                                              ? "border border-emerald-400/30 bg-emerald-400/15 text-emerald-300"
+                                                : "border border-white/10 bg-white/5 text-slate-400"
+                                                }`}
+                                                aria-label={`Speaking task ${i + 1}`}
+                                              >
                                   {i + 1}
                                 </button>
                               );
