@@ -36,16 +36,27 @@ describe("countWords", () => {
 });
 
 describe("gradeWriting", () => {
-  it("gives a perfect score for a long, clean answer", async () => {
+  it("does NOT give 100 to a simple clean answer (corrección estricta por nivel)", async () => {
     vi.stubGlobal("fetch", mockFetch([]));
     const answer =
       "I usually study in the evening because my house is quiet and I can focus better after dinner with enough time.";
     const grade = await gradeWriting(task(20), answer, "en");
 
-    expect(grade.score).toBe(100);
+    // Texto correcto pero simple (nivel B1) → no puede sacar 100.
+    expect(grade.score).toBeLessThan(70);
+    expect(grade.score).toBeGreaterThanOrEqual(40);
     expect(grade.meetsLength).toBe(true);
     expect(grade.issues).toEqual([]);
     expect(grade.wordCount).toBe(21);
+  });
+
+  it("da puntaje alto a una respuesta sofisticada y limpia (C1)", async () => {
+    vi.stubGlobal("fetch", mockFetch([]));
+    const answer =
+      "Although studying late can be exhausting, I usually revise in the evening because my house becomes remarkably quiet; consequently, I concentrate far more effectively and retain complex information, which ultimately strengthens my overall academic performance throughout the demanding semester.";
+    const grade = await gradeWriting(task(20), answer, "en");
+
+    expect(grade.score).toBeGreaterThanOrEqual(80);
   });
 
   it("returns score 0 for an empty answer", async () => {
