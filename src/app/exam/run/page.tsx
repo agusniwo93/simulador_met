@@ -1274,12 +1274,13 @@ function SpeakingRecorder({
           </span>
         ) : (
           <button
-            onClick={begin}
-            className="inline-flex items-center gap-2 rounded-full bg-gradient-to-r from-cyan-500 to-indigo-600 px-5 py-2.5 text-sm font-bold text-white shadow-[0_8px_24px_-10px_rgba(99,102,241,0.7)] transition hover:brightness-110 active:scale-95"
-          >
-            <span aria-hidden>▶</span>
-            {existingUrl ? t("exam.rerecord") : t("exam.speakStart")}
-          </button>
+  disabled={!!existingUrl}
+  onClick={begin}
+  className="inline-flex items-center gap-2 rounded-full bg-gradient-to-r from-cyan-500 to-indigo-500 px-5 py-2.5 text-sm font-bold text-white shadow-lg transition hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
+>
+  <span aria-hidden>▶</span>
+  {existingUrl ? "Audio guardado" : t("exam.speakStart")}
+</button>
         )}
 
         {state === "recording" && (
