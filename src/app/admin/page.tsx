@@ -748,7 +748,7 @@ function AnalyticsPanel({
                   <td className="py-2.5 pr-4 text-slate-400">{new Date(r.submittedAt).toLocaleString()}</td>
                   <td className="py-2.5 text-right whitespace-nowrap">
                     <a
-                      href={`/results/${r.id}?admin=true`}
+                      href={`/results/${r.id}`}
                       target="_blank"
                       rel="noreferrer"
                       className="font-bold text-cyan-300 hover:text-cyan-200"
