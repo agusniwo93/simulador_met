@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { useParams, useSearchParams } from "next/navigation";
+import { useParams } from "next/navigation";
 import { motion } from "framer-motion";
 import Background3D from "@/components/visual/Background3D";
 import { useI18n } from "@/lib/i18n/context";
@@ -151,8 +151,7 @@ function WritingGradeCard({ grade, t }: { grade: WritingGrade; t: Translate }) {
     <div className="glass rounded-2xl p-5 sm:p-6">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          {/* ¡Descomentado para el admin! */}
-          <p className="text-sm font-semibold leading-relaxed text-slate-100">{grade.prompt}</p>
+          {/*<p className="text-sm font-semibold leading-relaxed text-slate-100">{grade.prompt}</p>*/}
           <p className="mt-2 text-xs text-slate-400">
             {grade.wordCount} {t("common.words")} / {t("common.minWords", { n: grade.minWords })}
           </p>
@@ -179,13 +178,13 @@ function WritingGradeCard({ grade, t }: { grade: WritingGrade; t: Translate }) {
         ))}
       </div>
 
-      {/* ¡Descomentado para que el admin pueda leer la respuesta del alumno! */}
-      <div className="mt-5">
+      {/*<div className="mt-5">
         <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-slate-500">{t("results.yourAnswer")}</p>
         <div className="max-h-48 overflow-y-auto whitespace-pre-wrap rounded-xl border border-white/10 bg-slate-950/50 p-4 text-sm leading-relaxed text-slate-200">
           {grade.answer.trim() ? grade.answer : "-"}
         </div>
       </div>
+      */}
 
       <div className="mt-5 grid gap-4 lg:grid-cols-2">
         <div>
@@ -234,6 +233,7 @@ function McqReviewCard({ grade, index, t }: { grade: McqGrade; index: number; t:
   return (
     <div className="glass rounded-2xl p-4">
       <div className="flex items-start justify-between gap-3">
+        
         <p className="flex-1 whitespace-pre-line text-sm font-medium leading-relaxed text-slate-100">
           <span className="mr-1.5 text-slate-500">{index + 1}.</span>
           {grade.stem}
@@ -264,12 +264,12 @@ function McqReviewCard({ grade, index, t }: { grade: McqGrade; index: number; t:
 function SpeakingCard({ response, index, t }: { response: SpeakingResponse; index: number; t: Translate }) {
   return (
     <div className="glass rounded-2xl p-5">
-      {/* ¡Descomentado para el admin! */}
-      <p className="text-sm font-medium leading-relaxed text-slate-100 mb-4">
+      {/*
+      <p className="text-sm font-medium leading-relaxed text-slate-100">
         <span className="mr-1.5 text-slate-500">{index + 1}.</span>
         {response.prompt}
       </p>
-      
+      */}
       <div className="mt-4">
         <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-slate-500">{t("results.yourRecording")}</p>
         {response.audioUrl ? (
@@ -291,8 +291,7 @@ function SpeakingCard({ response, index, t }: { response: SpeakingResponse; inde
   );
 }
 
-// NUEVO: Agregamos el parámetro isAdmin a SectionDetail
-function SectionDetail({ section, index, t, isAdmin }: { section: SectionResult; index: number; t: Translate; isAdmin: boolean }) {
+function SectionDetail({ section, index, t }: { section: SectionResult; index: number; t: Translate }) {
   const correct = section.correctCount ?? section.mcqGrades?.filter((grade) => grade.correct).length ?? 0;
   const total = section.totalCount ?? section.mcqGrades?.length ?? 0;
   const missed = section.mcqGrades?.filter((grade) => !grade.correct).length ?? 0;
@@ -332,21 +331,16 @@ function SectionDetail({ section, index, t, isAdmin }: { section: SectionResult;
         )}
       </div>
 
-      {/* AQUÍ ESTÁ LA MAGIA: Todo el detalle solo se renderiza si isAdmin es true */}
-      {isAdmin && (
-        <div className="mt-6 space-y-4">
-          {section.kind === "writing" &&
-            (section.writingGrades ?? []).map((grade) => <WritingGradeCard key={grade.taskId} grade={grade} t={t} />)}
+      {section.kind === "writing" &&
+        (section.writingGrades ?? []).map((grade) => <WritingGradeCard key={grade.taskId} grade={grade} t={t} />)}
 
-          {(section.kind === "listening" || section.kind === "grammar" || section.kind === "reading") &&
-            (section.mcqGrades ?? []).map((grade, i) => <McqReviewCard key={grade.itemId} grade={grade} index={i} t={t} />)}
+      {(section.kind === "listening" || section.kind === "grammar" || section.kind === "reading") &&
+        (section.mcqGrades ?? []).map((grade, i) => <McqReviewCard key={grade.itemId} grade={grade} index={i} t={t} />)}
 
-          {section.kind === "speaking" &&
-            (section.speakingResponses ?? []).map((response, i) => (
-              <SpeakingCard key={response.taskId} response={response} index={i} t={t} />
-            ))}
-        </div>
-      )}
+      {section.kind === "speaking" &&
+        (section.speakingResponses ?? []).map((response, i) => (
+          <SpeakingCard key={response.taskId} response={response} index={i} t={t} />
+        ))}
     </motion.section>
   );
 }
@@ -354,12 +348,8 @@ function SectionDetail({ section, index, t, isAdmin }: { section: SectionResult;
 export default function ResultPage() {
   const { id } = useParams<{ id: string }>();
   const { t } = useI18n();
-  const searchParams = useSearchParams();
   const [status, setStatus] = useState<Status>("loading");
   const [result, setResult] = useState<ExamResult | null>(null);
-
-  // NUEVO: Verificamos si la URL tiene ?admin=true
-  const isAdmin = searchParams.get("admin") === "true";
 
   useEffect(() => {
     if (!id) return;
@@ -498,8 +488,7 @@ export default function ResultPage() {
 
         <div className="mt-10 space-y-10">
           {result.sectionResults.map((section, i) => (
-            {/* NUEVO: Pasamos la variable isAdmin al componente */}
-            <SectionDetail key={`detail-${section.kind}-${i}`} section={section} index={i} t={t} isAdmin={isAdmin} />
+            <SectionDetail key={`detail-${section.kind}-${i}`} section={section} index={i} t={t} />
           ))}
         </div>
 
