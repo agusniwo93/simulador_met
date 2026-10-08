@@ -18,6 +18,11 @@ import type {
 type Status = "loading" | "ok" | "error";
 type Translate = (path: string, params?: Record<string, string | number>) => string;
 
+// Botón "Hacer otro examen" al final de los resultados. Oculto por ahora; pon
+// `true` para volver a mostrarlo. Solo oculta el botón: el acceso sigue durando
+// 24 horas y se puede rendir otro examen desde la página de inicio.
+const SHOW_RETAKE_BUTTON = false;
+
 const fadeUp = {
   hidden: { opacity: 0, y: 20 },
   show: { opacity: 1, y: 0 },
@@ -511,9 +516,11 @@ export default function ResultPage() {
           <Link href="/" className="rounded-xl border border-white/15 bg-white/5 px-5 py-2.5 text-center text-sm font-medium text-slate-200 transition hover:bg-white/10">
             {t("results.backToProfile")}
           </Link>
-          <Link href="/exam" className="btn-primary rounded-xl px-6 py-2.5 text-center text-sm font-semibold">
-            {t("results.retake")}
-          </Link>
+          {SHOW_RETAKE_BUTTON && (
+            <Link href="/exam" className="btn-primary rounded-xl px-6 py-2.5 text-center text-sm font-semibold">
+              {t("results.retake")}
+            </Link>
+          )}
         </div>
       </div>
     </main>
