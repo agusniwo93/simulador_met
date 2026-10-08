@@ -213,6 +213,16 @@ body {
   background: rgba(15, 23, 42, 0.05);
   border-color: var(--accent);
 }
+/* Lista desplegable de un <select>: el fondo translúcido del campo se pinta
+   sobre blanco en la lista, y el texto claro no se lee. Se le da fondo opaco. */
+select.input-dark option {
+  background-color: #0f172a;
+  color: #e2e8f0;
+}
+:root[data-theme="light"] select.input-dark option {
+  background-color: #ffffff;
+  color: #0f172a;
+}
 
 /* ============================================================
    TEMA CLARO — remapeo global
