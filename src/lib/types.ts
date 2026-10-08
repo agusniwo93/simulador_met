@@ -165,9 +165,38 @@ export const DEFAULT_EXAM_CONFIG: ExamConfig = {
 
 export interface Payment {
   id: string;
-  amount: number;
+  amount: number; // monto realmente cobrado (0 si entró con un código gratis)
   currency: string;
   at: string; // ISO
+  orderId?: string;
+  code?: string; // código de descuento usado
+  percent?: number;
+}
+
+// ---- Códigos de descuento (generados desde el admin) ----
+
+export interface DiscountCode {
+  id: string;
+  code: string;
+  percent: number; // 10..100 (100 = gratis)
+  maxUses: number;
+  usedCount: number;
+  active: boolean;
+  note?: string;
+  createdAt: string; // ISO
+}
+
+// Pago con código de descuento iniciado en IziPay y aún sin confirmar. Reserva
+// un uso del código; el uso se gasta recién cuando el pago se confirma.
+export interface PendingOrder {
+  orderId: string;
+  amount: number;
+  currency: string;
+  codeId: string;
+  code: string; // copia del código y su descuento, por si el admin lo borra
+  percent: number;
+  holder: string; // navegador que la creó (su propia reserva no lo bloquea)
+  createdAt: string; // ISO
 }
 
 export interface RevenueStats {

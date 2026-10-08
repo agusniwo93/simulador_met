@@ -12,11 +12,15 @@ import type {
   Payment,
   RevenueStats,
   ExamConfig,
+  DiscountCode,
+  PendingOrder,
 } from "./types";
 import { DEFAULT_THEME, DEFAULT_EXAM_CONFIG } from "./types";
 import { SEED_SECTIONS, SEED_TITLE, SEED_DURATION, SEED_ID, SEED_VERSION } from "./exam/seed-exam";
 import { expandListeningDistractors } from "./exam/distractors";
 import SEED_EXTRA from "./exam/seed-extra.json";
+import { basePrice, canonicalCode, generateCode } from "./pay/discount";
+import { discountedAmount } from "./pay/price";
 
 // Exámenes semilla adicionales (SILUMADOR/SIMULADOR 1,2,3,5,6). El 4 lo cubre
 // SEED_SECTIONS (con imágenes). Súbelo cuando cambie el contenido.
@@ -37,6 +41,8 @@ interface DB {
   exams: Exam[];
   examResults: ExamResult[];
   payments?: Payment[];
+  discountCodes?: DiscountCode[];
+  pendingOrders?: PendingOrder[];
   theme?: ThemeSettings;
   examConfig?: ExamConfig;
 }
@@ -237,24 +243,204 @@ export function deleteExamResult(id: string): boolean {
   });
 }
 
+// ---------- Códigos de descuento ----------
+
+// Un pago iniciado con código reserva un uso durante este tiempo, para que dos
+// alumnos no se lleven a la vez el último. Es algo más que los 15 minutos que
+// vive un formulario de pago de IziPay: pasado ese plazo ya no se puede pagar.
+const RESERVE_MS = 20 * 60 * 1000;
+// Pagos en curso que un mismo navegador puede tener abiertos con un código (para
+// reintentar tras una tarjeta rechazada). Acota cuánto se puede exceder el límite
+// de usos si alguien paga varios formularios abiertos a la vez.
+const MAX_OPEN_PER_HOLDER = 3;
+// Las órdenes pendientes se conservan un día por si la confirmación llega tarde.
+const PENDING_TTL_MS = 24 * 60 * 60 * 1000;
+
+// Por qué no se puede usar un código: no existe, está desactivado o agotado
+// ("invalid"), o sus usos libres están reservados por pagos en curso ("busy").
+export type CodeRejection = "invalid" | "busy";
+export type CodeCheck = { ok: true; code: DiscountCode } | { ok: false; reason: CodeRejection };
+
+// Pagos en curso (aún dentro del plazo de reserva) hechos con un código.
+function openOrders(db: DB, codeId: string): PendingOrder[] {
+  const now = Date.now();
+  return (db.pendingOrders ?? []).filter(
+    (o) => o.codeId === codeId && now - new Date(o.createdAt).getTime() < RESERVE_MS
+  );
+}
+
+function checkCode(db: DB, input: string, holder?: string): CodeCheck {
+  const wanted = canonicalCode(input);
+  const code = (db.discountCodes ?? []).find((c) => canonicalCode(c.code) === wanted);
+  if (!code || !code.active || code.usedCount >= code.maxUses) {
+    return { ok: false, reason: "invalid" };
+  }
+  // Las reservas del propio navegador no cuentan: es el mismo alumno, que
+  // recargó la página o reintenta el pago.
+  const reservedByOthers = openOrders(db, code.id).filter((o) => o.holder !== holder).length;
+  if (code.usedCount + reservedByOthers >= code.maxUses) return { ok: false, reason: "busy" };
+  return { ok: true, code };
+}
+
+export function listDiscountCodes(): DiscountCode[] {
+  return [...(read().discountCodes ?? [])].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+}
+
+export function createDiscountCode(input: { percent: number; maxUses: number; note?: string }): DiscountCode {
+  return update((db) => {
+    db.discountCodes = db.discountCodes ?? [];
+    let code = generateCode();
+    while (db.discountCodes.some((c) => c.code === code)) code = generateCode();
+    const created: DiscountCode = {
+      id: randomUUID(),
+      code,
+      percent: input.percent,
+      maxUses: input.maxUses,
+      usedCount: 0,
+      active: true,
+      note: input.note || undefined,
+      createdAt: new Date().toISOString(),
+    };
+    db.discountCodes.push(created);
+    return created;
+  });
+}
+
+export function setDiscountCodeActive(id: string, active: boolean): DiscountCode | undefined {
+  return update((db) => {
+    const code = (db.discountCodes ?? []).find((c) => c.id === id);
+    if (code) code.active = active;
+    return code;
+  });
+}
+
+export function deleteDiscountCode(id: string): boolean {
+  return update((db) => {
+    const before = (db.discountCodes ?? []).length;
+    db.discountCodes = (db.discountCodes ?? []).filter((c) => c.id !== id);
+    return db.discountCodes.length < before;
+  });
+}
+
+// Comprueba si un código se puede usar ahora mismo. Solo lee: no gasta ni reserva.
+export function checkDiscountCode(input: string, holder?: string): CodeCheck {
+  return checkCode(read(), input, holder);
+}
+
+export type ReserveResult =
+  | { ok: true; amount: number; code: DiscountCode }
+  | { ok: false; reason: CodeRejection | "free" };
+
+// Inicia un pago con código de descuento: calcula el monto a cobrar y reserva un
+// uso. El uso solo se gasta cuando el pago se confirma (completeOrder).
+export function reserveCodeOrder(input: {
+  orderId: string;
+  code: string;
+  holder: string;
+  base: number;
+  currency: string;
+}): ReserveResult {
+  // Se comprueba leyendo, sin escribir: un intento rechazado no reescribe la base.
+  const current = read();
+  const check = checkCode(current, input.code, input.holder);
+  if (!check.ok) return check;
+  const { code } = check;
+  // Los códigos gratis no pasan por IziPay: se canjean con redeemFreeCode.
+  if (code.percent === 100) return { ok: false, reason: "free" };
+  const own = openOrders(current, code.id).filter((o) => o.holder === input.holder).length;
+  if (own >= MAX_OPEN_PER_HOLDER) return { ok: false, reason: "busy" };
+
+  const amount = discountedAmount(input.base, code.percent);
+  update((db) => {
+    const now = Date.now();
+    db.pendingOrders = (db.pendingOrders ?? []).filter(
+      (o) => now - new Date(o.createdAt).getTime() < PENDING_TTL_MS
+    );
+    db.pendingOrders.push({
+      orderId: input.orderId,
+      amount,
+      currency: input.currency,
+      codeId: code.id,
+      code: code.code,
+      percent: code.percent,
+      holder: input.holder,
+      createdAt: new Date().toISOString(),
+    });
+  });
+  return { ok: true, amount, code };
+}
+
+// Libera la reserva de un pago que no llegó a crearse en IziPay.
+export function cancelPendingOrder(orderId: string): void {
+  update((db) => {
+    db.pendingOrders = (db.pendingOrders ?? []).filter((o) => o.orderId !== orderId);
+  });
+}
+
+// Canjea un código 100% gratis: gasta un uso y deja constancia (monto 0).
+export function redeemFreeCode(input: string): boolean {
+  const check = checkCode(read(), input);
+  if (!check.ok || check.code.percent !== 100) return false;
+  const { id } = check.code;
+  return update((db) => {
+    const code = (db.discountCodes ?? []).find((c) => c.id === id);
+    if (!code) return false;
+    code.usedCount += 1;
+    db.payments = db.payments ?? [];
+    db.payments.push({
+      id: randomUUID(),
+      amount: 0,
+      currency: basePrice().currency,
+      at: new Date().toISOString(),
+      code: code.code,
+      percent: code.percent,
+    });
+    return true;
+  });
+}
+
 // ---------- Pagos (ingresos) ----------
 
-export function recordPayment(input: { amount: number; currency: string }): Payment {
+// Pago confirmado por IziPay: registra el ingreso con el monto realmente cobrado
+// y, si se pagó con código, gasta un uso. Cada orden se registra una sola vez:
+// si la confirmación de esa orden ya se había recibido devuelve el pago original
+// con `repeated: true`, sin volver a gastar el código ni sumar ingresos.
+export function completeOrder(
+  orderId: string | undefined,
+  paid: { amount?: number; currency?: string }
+): { payment: Payment; repeated: boolean } {
+  if (orderId) {
+    const existing = (read().payments ?? []).find((p) => p.orderId === orderId);
+    if (existing) return { payment: existing, repeated: true };
+  }
   return update((db) => {
+    const pending = db.pendingOrders ?? [];
+    const order = orderId ? pending.find((o) => o.orderId === orderId) : undefined;
+    if (order) {
+      db.pendingOrders = pending.filter((o) => o !== order);
+      // El admin pudo borrar el código mientras tanto; el pago igual se registra.
+      const code = (db.discountCodes ?? []).find((c) => c.id === order.codeId);
+      if (code) code.usedCount += 1;
+    }
+    const base = basePrice();
     const payment: Payment = {
       id: randomUUID(),
-      amount: input.amount,
-      currency: input.currency,
+      amount: paid.amount ?? order?.amount ?? base.amount,
+      currency: paid.currency ?? order?.currency ?? base.currency,
       at: new Date().toISOString(),
+      orderId,
+      code: order?.code,
+      percent: order?.percent,
     };
     db.payments = db.payments ?? [];
     db.payments.push(payment);
-    return payment;
+    return { payment, repeated: false };
   });
 }
 
 function computeRevenue(): RevenueStats {
-  const payments = read().payments ?? [];
+  // Los accesos gratis (monto 0) no cuentan como pagos.
+  const payments = (read().payments ?? []).filter((p) => p.amount > 0);
   const currency = payments[0]?.currency || process.env.PAY_CURRENCY || "USD";
   const total = payments.reduce((s, p) => s + p.amount, 0);
 

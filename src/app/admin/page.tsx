@@ -6,7 +6,8 @@ import { motion } from "framer-motion";
 import Background3D from "@/components/visual/Background3D";
 import Dialog from "@/components/ui/Dialog";
 import { useT } from "@/lib/i18n/context";
-import type { Exam, Analytics, ThemeSettings, ExamConfig, SectionKind } from "@/lib/types";
+import { ALLOWED_PERCENTS, discountedAmount, formatPrice } from "@/lib/pay/price";
+import type { Exam, Analytics, ThemeSettings, ExamConfig, SectionKind, DiscountCode } from "@/lib/types";
 import { DEFAULT_THEME, DEFAULT_EXAM_CONFIG } from "@/lib/types";
 
 type Banner = { kind: "success" | "error"; text: string } | null;
@@ -138,6 +139,9 @@ export default function AdminPage() {
 
         {/* ====== ANALÍTICAS ====== */}
         <AnalyticsPanel analytics={analytics} t={t} onChange={loadData} />
+
+        {/* ====== CÓDIGOS DE DESCUENTO ====== */}
+        <DiscountCodesPanel t={t} />
 
         {/* ====== TEMA DE COLORES ====== */}
         <ExamConfigPanel t={t} />
@@ -280,6 +284,259 @@ export default function AdminPage() {
         onConfirm={doRemoveExam}
       />
     </main>
+  );
+}
+
+// ===================== CÓDIGOS DE DESCUENTO =====================
+
+function DiscountCodesPanel({ t }: { t: (k: string, p?: Record<string, string | number>) => string }) {
+  const [codes, setCodes] = useState<DiscountCode[]>([]);
+  const [price, setPrice] = useState<{ amount: number; currency: string } | null>(null);
+  const [percent, setPercent] = useState(50);
+  const [usesText, setUsesText] = useState("1");
+  const [note, setNote] = useState("");
+  const [creating, setCreating] = useState(false);
+  const [failed, setFailed] = useState(false);
+  const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [confirmDel, setConfirmDel] = useState<DiscountCode | null>(null);
+  const [deleting, setDeleting] = useState(false);
+
+  // Devuelve false si no se pudo cargar (p. ej. la sesión de admin caducó).
+  const load = useCallback(async () => {
+    try {
+      const res = await fetch("/api/admin/codes");
+      if (!res.ok) return false;
+      const data = (await res.json()) as { codes: DiscountCode[]; price: { amount: number; currency: string } };
+      setCodes(data.codes);
+      setPrice(data.price);
+      return true;
+    } catch {
+      return false;
+    }
+  }, []);
+
+  useEffect(() => {
+    (async () => {
+      await load();
+    })();
+  }, [load]);
+
+  // Ejecuta un cambio (si lo hay) y recarga la lista; avisa si algo falla.
+  const run = async (request?: () => Promise<Response>) => {
+    let ok = false;
+    try {
+      ok = (!request || (await request()).ok) && (await load());
+    } catch {
+      ok = false;
+    }
+    setFailed(!ok);
+    return ok;
+  };
+
+  const maxUses = Number(usesText);
+  const usesValid = /^\d+$/.test(usesText) && maxUses >= 1 && maxUses <= 10000;
+
+  const create = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!usesValid || creating) return;
+    setCreating(true);
+    const ok = await run(() =>
+      fetch("/api/admin/codes", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ percent, maxUses, note: note.trim() || undefined }),
+      })
+    );
+    if (ok) setNote("");
+    setCreating(false);
+  };
+
+  const toggle = (c: DiscountCode) =>
+    run(() =>
+      fetch(`/api/admin/codes/${c.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ active: !c.active }),
+      })
+    );
+
+  const doDelete = async () => {
+    if (!confirmDel) return;
+    setDeleting(true);
+    await run(() => fetch(`/api/admin/codes/${confirmDel.id}`, { method: "DELETE" }));
+    setConfirmDel(null);
+    setDeleting(false);
+  };
+
+  const copy = async (c: DiscountCode) => {
+    try {
+      await navigator.clipboard.writeText(c.code);
+      setCopiedId(c.id);
+      setTimeout(() => setCopiedId((id) => (id === c.id ? null : id)), 1500);
+    } catch {
+      // Sin permiso de portapapeles: el código sigue visible para copiarlo a mano.
+    }
+  };
+
+  const discountLabel = (p: number) => (p === 100 ? t("admin.codeFreeOption") : `${p}%`);
+  const finalPrice = price ? discountedAmount(price.amount, percent) : null;
+
+  const status = (c: DiscountCode) =>
+    !c.active
+      ? { label: t("admin.statusDisabled"), cls: "bg-white/10 text-slate-400" }
+      : c.usedCount >= c.maxUses
+        ? { label: t("admin.statusExhausted"), cls: "bg-rose-500/10 text-rose-300" }
+        : { label: t("admin.statusActive"), cls: "bg-emerald-500/10 text-emerald-300" };
+
+  return (
+    <motion.section
+      initial={{ opacity: 0, y: 18 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="glass rounded-3xl p-6 sm:p-8 mt-6"
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0 flex-1">
+          <h2 className="text-xl font-black">{t("admin.codesTitle")}</h2>
+          <p className="mt-1 text-sm text-slate-400">{t("admin.codesDesc")}</p>
+        </div>
+        <button
+          onClick={() => run()}
+          className="glass rounded-xl px-4 py-2 text-sm font-bold text-slate-300 hover:bg-white/10 transition-colors shrink-0"
+        >
+          {t("admin.refresh")}
+        </button>
+      </div>
+
+      <form onSubmit={create} className="mt-5 grid gap-3 sm:grid-cols-[auto_auto_1fr_auto] sm:items-end">
+        <label className="flex flex-col gap-1.5">
+          <span className="text-xs font-bold uppercase tracking-wider text-slate-500">{t("admin.codeDiscount")}</span>
+          <select
+            value={percent}
+            onChange={(e) => setPercent(Number(e.target.value))}
+            className="input-dark rounded-xl px-4 py-3 text-sm"
+          >
+            {ALLOWED_PERCENTS.map((p) => (
+              <option key={p} value={p}>
+                {discountLabel(p)}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="flex flex-col gap-1.5">
+          <span className="text-xs font-bold uppercase tracking-wider text-slate-500">{t("admin.codeUses")}</span>
+          <input
+            type="number"
+            min={1}
+            max={10000}
+            step={1}
+            required
+            value={usesText}
+            onChange={(e) => setUsesText(e.target.value)}
+            className="input-dark w-full rounded-xl px-4 py-3 text-sm sm:w-24"
+          />
+        </label>
+        <label className="flex min-w-0 flex-col gap-1.5">
+          <span className="text-xs font-bold uppercase tracking-wider text-slate-500">{t("admin.codeNote")}</span>
+          <input
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+            maxLength={80}
+            placeholder={t("admin.codeNotePlaceholder")}
+            className="input-dark w-full rounded-xl px-4 py-3 text-sm"
+          />
+        </label>
+        <button
+          type="submit"
+          disabled={creating}
+          className="btn-primary rounded-xl px-6 py-3 text-sm font-black uppercase tracking-tight disabled:opacity-50"
+        >
+          {creating ? t("admin.codeGenerating") : t("admin.codeGenerate")}
+        </button>
+      </form>
+      {failed && (
+        <p role="alert" className="mt-3 rounded-xl bg-rose-500/10 px-4 py-3 text-sm font-semibold text-rose-300">
+          {t("admin.codeError")}
+        </p>
+      )}
+      {finalPrice !== null && price && (
+        <p className="mt-3 text-xs text-slate-500">
+          {t("admin.codeStudentPays", {
+            price: finalPrice === 0 ? t("pay.free") : formatPrice(finalPrice, price.currency),
+          })}
+        </p>
+      )}
+
+      {codes.length === 0 ? (
+        <p className="mt-6 text-slate-400">{t("admin.noCodes")}</p>
+      ) : (
+        <div className="mt-6 overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="text-left text-xs uppercase tracking-wider text-slate-500">
+                <th className="py-2 pr-4">{t("admin.codeCol")}</th>
+                <th className="py-2 pr-4">{t("admin.codeDiscount")}</th>
+                <th className="py-2 pr-4">{t("admin.codeUsedCol")}</th>
+                <th className="py-2 pr-4">{t("admin.codeStatus")}</th>
+                <th className="py-2 pr-4">{t("admin.date")}</th>
+                <th className="py-2"></th>
+              </tr>
+            </thead>
+            <tbody>
+              {codes.map((c) => {
+                const st = status(c);
+                return (
+                  <tr key={c.id} className="border-t border-white/5">
+                    <td className="py-2.5 pr-4">
+                      <span className="whitespace-nowrap font-mono font-bold text-slate-100">{c.code}</span>
+                      {c.note && <span className="block text-xs text-slate-500">{c.note}</span>}
+                    </td>
+                    <td className="py-2.5 pr-4 font-bold text-cyan-300 whitespace-nowrap">{discountLabel(c.percent)}</td>
+                    <td className="py-2.5 pr-4 font-semibold text-slate-200">
+                      {c.usedCount} / {c.maxUses}
+                    </td>
+                    <td className="py-2.5 pr-4">
+                      <span className={`whitespace-nowrap rounded-full px-2.5 py-1 text-[11px] font-bold ${st.cls}`}>
+                        {st.label}
+                      </span>
+                    </td>
+                    <td className="py-2.5 pr-4 text-slate-400 whitespace-nowrap">
+                      {new Date(c.createdAt).toLocaleDateString()}
+                    </td>
+                    <td className="py-2.5 text-right whitespace-nowrap">
+                      <button onClick={() => copy(c)} className="font-bold text-cyan-300 hover:text-cyan-200">
+                        {copiedId === c.id ? `✓ ${t("admin.copied")}` : t("admin.copy")}
+                      </button>
+                      <button onClick={() => toggle(c)} className="ml-3 font-bold text-slate-300 hover:text-white">
+                        {c.active ? t("admin.disable") : t("admin.enable")}
+                      </button>
+                      <button
+                        onClick={() => setConfirmDel(c)}
+                        className="ml-3 font-bold text-rose-400 hover:text-rose-300"
+                      >
+                        {t("admin.delete")}
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      <Dialog
+        open={!!confirmDel}
+        onClose={() => !deleting && setConfirmDel(null)}
+        icon="🗑️"
+        tone="danger"
+        loading={deleting}
+        title={t("admin.confirmDeleteCodeTitle")}
+        description={confirmDel ? t("admin.confirmDeleteCode", { code: confirmDel.code }) : ""}
+        confirmLabel={t("admin.delete")}
+        cancelLabel={t("common.cancel")}
+        onConfirm={doDelete}
+      />
+    </motion.section>
   );
 }
 
@@ -598,7 +855,12 @@ function AnalyticsPanel({
   const scoreColor = (s: number) =>
     s >= 80 ? "text-emerald-400" : s >= 60 ? "text-amber-400" : "text-rose-400";
 
-  const money = (n: number) => `${revenue.currency} ${n.toLocaleString()}`;
+  // Con códigos de descuento los montos pueden llevar céntimos (p. ej. 7.50).
+  const money = (n: number) =>
+    `${revenue.currency} ${n.toLocaleString(undefined, {
+      minimumFractionDigits: Number.isInteger(n) ? 0 : 2,
+      maximumFractionDigits: 2,
+    })}`;
   const maxDay = Math.max(1, ...revenue.byDay.map((d) => d.amount));
 
   const doDel = async () => {

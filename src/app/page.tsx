@@ -1,6 +1,7 @@
 import { cookies } from "next/headers";
 import LandingClient from "@/components/landing/LandingClient";
 import { ACCESS_COOKIE, hasValidAccess } from "@/lib/auth/access";
+import { basePrice } from "@/lib/pay/discount";
 
 export default async function Home({
   searchParams,
@@ -18,6 +19,7 @@ export default async function Home({
   return (
     <LandingClient
       hasAccess={hasAccess}
+      price={basePrice()}
       autoPay={sp.pay === "1"}
       payFailed={sp.pay === "failed"}
     />

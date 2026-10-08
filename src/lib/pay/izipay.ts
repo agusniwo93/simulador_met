@@ -1,6 +1,10 @@
 // Archivo: src/lib/izipay.ts
 const IZIPAY_API_URL = "https://api.micuentaweb.pe"; // Este es el servidor oficial de IziPay en Perú
 
+// Moneda en la que se cobra SIEMPRE (ver el payload más abajo). El precio que se
+// muestra al alumno usa esta misma constante.
+export const CHARGE_CURRENCY = "USD";
+
 // Verificamos si pusiste las claves en el .env
 export function izipayConfigured(): boolean {
   return Boolean(process.env.IZIPAY_SHOP_ID && process.env.IZIPAY_API_KEY);
@@ -27,7 +31,7 @@ export async function createPaymentForm(opts: {
   // 4. Armamos el paquete de datos que le enviaremos a IziPay (Forzando Dólares)
   const payload = {
     amount: amountInCents,
-    currency: "USD", 
+    currency: CHARGE_CURRENCY,
     orderId: opts.orderId,
     customer: { email: opts.email },
     actionMode: "INTERACTIVE", // Para que muestre un formulario visual

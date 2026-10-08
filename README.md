@@ -182,4 +182,5 @@ src/
 ## ⚠️ Notas
 
 - La carpeta `data/` y `.env.local` están en `.gitignore` (no se suben).
-- Si cambias el monto/moneda, ajusta `PAY_AMOUNT`, `PAY_CURRENCY` (ej. `pen`) y el texto del precio en `src/lib/i18n/dictionaries.ts` (`pay.price`).
+- Si cambias el monto, ajusta `PAY_AMOUNT`: el precio que se muestra y el que se cobra salen de ahí. La moneda del cobro está fija en USD (`CHARGE_CURRENCY` en `src/lib/pay/izipay.ts`).
+- **Códigos de descuento**: en `/admin` → *Códigos de descuento* se generan códigos al azar con un descuento (10–90 % o gratis) y un número de usos. El alumno lo ingresa en el diálogo de pago; cada pago confirmado (o ingreso gratis) gasta un uso y al agotarse deja de funcionar.
