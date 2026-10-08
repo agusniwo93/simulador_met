@@ -162,7 +162,7 @@ export default function ExamRunPage() {
         const res = await fetch("/api/exam/set", { cache: "no-store" });
 
         if (res.status === 402) {
-          router.replace("/");
+          router.replace("/?pay=1");
           return;
         }
         if (res.status === 404 || !res.ok) {

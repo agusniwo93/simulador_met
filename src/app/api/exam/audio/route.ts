@@ -3,7 +3,8 @@ import fs from "fs";
 import path from "path";
 import { randomUUID } from "crypto";
 import { cookies } from "next/headers";
-import { ACCESS_COOKIE, hasValidAccess } from "@/lib/auth/access";
+import { ACCESS_COOKIE } from "@/lib/auth/access";
+import { usableAccessPass } from "@/lib/auth/pass";
 import { UPLOAD_DIR } from "@/lib/db";
 
 // Extensión por tipo MIME de audio (MediaRecorder suele producir webm/ogg/mp4).
@@ -20,7 +21,7 @@ const MAX_BYTES = 15 * 1024 * 1024; // 15 MB por grabación
 // Sube la grabación de voz de una tarea de Speaking. Requiere pase de acceso.
 export async function POST(req: Request) {
   const store = await cookies();
-  if (!(await hasValidAccess(store.get(ACCESS_COOKIE)?.value))) {
+  if (!(await usableAccessPass(store.get(ACCESS_COOKIE)?.value))) {
     return NextResponse.json({ error: "payment_required" }, { status: 402 });
   }
 

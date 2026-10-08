@@ -14,6 +14,7 @@ import type {
   ExamConfig,
   DiscountCode,
   PendingOrder,
+  PassRecord,
 } from "./types";
 import { DEFAULT_THEME, DEFAULT_EXAM_CONFIG } from "./types";
 import { SEED_SECTIONS, SEED_TITLE, SEED_DURATION, SEED_ID, SEED_VERSION } from "./exam/seed-exam";
@@ -43,6 +44,7 @@ interface DB {
   payments?: Payment[];
   discountCodes?: DiscountCode[];
   pendingOrders?: PendingOrder[];
+  passes?: PassRecord[];
   theme?: ThemeSettings;
   examConfig?: ExamConfig;
 }
@@ -240,6 +242,56 @@ export function deleteExamResult(id: string): boolean {
     const before = db.examResults.length;
     db.examResults = db.examResults.filter((r) => r.id !== id);
     return db.examResults.length < before;
+  });
+}
+
+// ---------- Pases de acceso (un examen por pase) ----------
+
+// Un pase caduca a las 24 horas de emitido; pasado este plazo desde que empezó
+// el examen, su registro ya no hace falta.
+const PASS_RECORD_TTL_MS = 48 * 60 * 60 * 1000;
+
+// Registros de pases aún vigentes (descarta los caducados).
+function livePasses(db: DB): PassRecord[] {
+  const now = Date.now();
+  db.passes = (db.passes ?? []).filter(
+    (p) => now - new Date(p.startedAt).getTime() < PASS_RECORD_TTL_MS
+  );
+  return db.passes;
+}
+
+export function getPassRecord(id: string): PassRecord | undefined {
+  return (read().passes ?? []).find((p) => p.id === id);
+}
+
+// Fija el examen que le toca a un pase al empezar, para que reciba siempre el
+// mismo aunque recargue la página o borre los datos del navegador.
+export function startPassExam(id: string, examId: string): PassRecord {
+  return update((db) => {
+    const passes = livePasses(db);
+    const existing = passes.find((p) => p.id === id);
+    if (existing) {
+      existing.examId = examId;
+      return existing;
+    }
+    const record: PassRecord = { id, examId, startedAt: new Date().toISOString() };
+    passes.push(record);
+    return record;
+  });
+}
+
+// Marca el pase como gastado al entregar el examen: ya no sirve para rendir otro.
+export function finishPass(id: string, examId: string, resultId: string): void {
+  update((db) => {
+    const passes = livePasses(db);
+    const now = new Date().toISOString();
+    const existing = passes.find((p) => p.id === id);
+    if (existing) {
+      existing.resultId = resultId;
+      existing.usedAt = now;
+    } else {
+      passes.push({ id, examId, startedAt: now, resultId, usedAt: now });
+    }
   });
 }
 

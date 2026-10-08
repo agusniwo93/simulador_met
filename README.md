@@ -51,7 +51,7 @@ Abre **http://localhost:3000**.
 - **Panel admin** protegido por código:
   - **Subir PDF** con plantilla fija → carga automática de preguntas y su retroalimentación.
   - **Analíticas**: total de exámenes, puntaje promedio, distribución de puntajes, errores más comunes, promedio por tarea y exámenes recientes.
-- **Pago de acceso** con PayPal (Orders v2), con pase válido por 24 h (cookie firmada, sin cuentas). Solo se concede tras un pago verificado.
+- **Pago de acceso** con IziPay: cada pago (o código de descuento) da un pase para **un examen**, con 24 h para rendirlo (cookie firmada, sin cuentas). Al entregar el examen el pase queda gastado. Solo se concede tras un pago verificado.
 - **Bilingüe EN/ES** con cambio instantáneo.
 - **Diseño 3D** (three.js) + animaciones (Framer Motion), responsive para móvil y escritorio.
 

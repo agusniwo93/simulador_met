@@ -1,6 +1,7 @@
 import { SignJWT, jwtVerify } from "jose";
 
-// Pase de acceso (NO es una cuenta): se emite tras pagar y permite rendir el examen.
+// Pase de acceso (NO es una cuenta): se emite tras pagar (o canjear un código
+// gratis) y permite rendir UN examen dentro de las 24 horas siguientes.
 // Edge-safe (solo jose) para poder usarse en el middleware.
 
 export const ACCESS_COOKIE = "met_access";
@@ -23,19 +24,31 @@ export function getSigningKey(): Uint8Array {
 export async function signAccessPass(): Promise<string> {
   return new SignJWT({ paid: true })
     .setProtectedHeader({ alg: "HS256" })
+    // Identificador único del pase: cada pase vale por UN examen, y con él se
+    // sabe en el servidor si ya se gastó (ver lib/auth/pass.ts).
+    .setJti(crypto.randomUUID())
     .setIssuedAt()
     .setExpirationTime(`${MAX_AGE_SECONDS}s`)
     .sign(getSigningKey());
 }
 
-export async function hasValidAccess(token: string | undefined): Promise<boolean> {
-  if (!token) return false;
+// Verifica el pase y devuelve su identificador, o null si no es válido.
+export async function readAccessPass(token: string | undefined): Promise<{ id: string } | null> {
+  if (!token) return null;
   try {
     const { payload } = await jwtVerify(token, getSigningKey());
-    return payload.paid === true;
+    if (payload.paid !== true) return null;
+    // Los pases emitidos antes de llevar identificador se reconocen por su firma.
+    return { id: payload.jti ?? `sig:${token.split(".")[2]}` };
   } catch {
-    return false;
+    return null;
   }
+}
+
+// Pase válido (firma y vigencia). No comprueba si ya se gastó: eso requiere la
+// base de datos y se hace en el servidor con usableAccessPass.
+export async function hasValidAccess(token: string | undefined): Promise<boolean> {
+  return (await readAccessPass(token)) !== null;
 }
 
 export const accessCookieOptions = {

@@ -161,6 +161,18 @@ export const DEFAULT_EXAM_CONFIG: ExamConfig = {
   shuffle: true,
 };
 
+// ---- Pases de acceso ----
+
+// Pase que ya empezó un examen. Cada pase (pago o código) vale por UN examen:
+// se le asigna uno al empezar y queda gastado al entregarlo.
+export interface PassRecord {
+  id: string; // identificador del pase
+  examId: string; // examen que le tocó (el mismo si recarga la página)
+  startedAt: string; // ISO
+  resultId?: string; // resultado entregado → el pase ya está gastado
+  usedAt?: string; // ISO
+}
+
 // ---- Pagos (ingresos) ----
 
 export interface Payment {
