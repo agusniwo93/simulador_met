@@ -121,6 +121,10 @@ const en = {
     speakAutoStop: "Stops automatically at 0",
     micDenied: "Microphone access was denied. Allow it in your browser to record.",
     micUnsupported: "Your browser does not support audio recording.",
+    recordNow: "Record now",
+    recordFailed: "The recording could not start. Please try again.",
+    uploadFailed: "Your recording could not be saved. Check your connection and press “Retry”.",
+    retryUpload: "Retry",
   },
   results: {
     title: "Your results",
@@ -369,6 +373,10 @@ const es: Dict = {
     speakAutoStop: "Se detiene sola al llegar a 0",
     micDenied: "Se denegó el acceso al micrófono. Permítelo en tu navegador para grabar.",
     micUnsupported: "Tu navegador no soporta la grabación de audio.",
+    recordNow: "Grabar ahora",
+    recordFailed: "No se pudo iniciar la grabación. Vuelve a intentarlo.",
+    uploadFailed: "No se pudo guardar tu grabación. Revisa tu conexión y pulsa «Reintentar».",
+    retryUpload: "Reintentar",
   },
   results: {
     title: "Tus resultados",
