@@ -22,6 +22,9 @@ const LS_NAME = "met_student_name";
 const LS_CONFIG = "met_exam_config";
 const LS_DEADLINES = "met_section_deadlines"; // { [sectionIndex]: timestamp }
 const LS_PLAYED = "met_listening_played"; // ids de listening ya reproducidos
+// Dónde va el alumno: { examId, section, speakingTask }. Al recargar la página
+// vuelve a esa sección; las anteriores siguen cerradas.
+const LS_POSITION = "met_exam_position";
 
 function readJson<T>(key: string, fallback: T): T {
   try {
@@ -101,6 +104,9 @@ export default function ExamRunPage() {
   const submittingRef = useRef(false);
   const autoSubmitFiredRef = useRef(false);
   const submitRef = useRef<(auto: boolean) => void>(() => {});
+  // Tarea de Speaking a la que volver tras recargar: se aplica una sola vez,
+  // cuando la página llega a la sección restaurada.
+  const restoredSpeakingTaskRef = useRef<{ section: number; task: number } | null>(null);
 
   // ---------- 1) Carga del examen ----------
   useEffect(() => {
@@ -120,6 +126,24 @@ export default function ExamRunPage() {
       setExam(ex);
       setConfig(readJson<ExamConfig>(LS_CONFIG, DEFAULT_EXAM_CONFIG));
       setPlayed(readJson<string[]>(LS_PLAYED, []));
+
+      // Volver a la sección (y tarea de Speaking) donde iba: al recargar NO
+      // debe volver al inicio, porque las secciones ya cerradas no se pueden
+      // cambiar. Solo si la posición guardada es de este mismo examen.
+      const position = readJson<{ examId?: string; section?: number; speakingTask?: number }>(
+        LS_POSITION,
+        {}
+      );
+      if (position.examId === ex.id && typeof position.section === "number") {
+        const section = Math.min(Math.max(0, Math.floor(position.section)), ex.sections.length - 1);
+        if (section > 0) {
+          restoredSpeakingTaskRef.current = {
+            section,
+            task: Math.max(0, Math.floor(position.speakingTask ?? 0)),
+          };
+          setActiveSection(section);
+        }
+      }
 
       // Restaurar respuestas guardadas.
       try {
@@ -281,11 +305,24 @@ export default function ExamRunPage() {
     });
   }, []);
 
-  // Al cambiar de sección, detener el listening en curso.
+  // Al cambiar de sección, detener el listening en curso y empezar por la
+  // primera tarea (o por la que iba, si se acaba de recargar la página).
   useEffect(() => {
     listen.stop();
-    setActiveSpeakingTask(0);
+    const restored = restoredSpeakingTaskRef.current;
+    if (restored && restored.section === activeSection) {
+      setActiveSpeakingTask(restored.task);
+      restoredSpeakingTaskRef.current = null;
+    } else {
+      setActiveSpeakingTask(0);
+    }
   }, [activeSection, listen.stop]);
+
+  // Guardar dónde va el alumno, para retomarlo ahí si recarga la página.
+  useEffect(() => {
+    if (phase !== "exam" || !exam) return;
+    writeJson(LS_POSITION, { examId: exam.id, section: activeSection, speakingTask: activeSpeakingTask });
+  }, [phase, exam, activeSection, activeSpeakingTask]);
 
   // Al ENTRAR a la sección de Listening, reproducir automáticamente todo el
   // audio (todas las conversaciones seguidas), una sola vez.
@@ -330,7 +367,7 @@ export default function ExamRunPage() {
 
         // Limpieza de almacenamiento al terminar.
         try {
-          [LS_EXAM, LS_ANSWERS, LS_END, LS_NAME, LS_CONFIG, LS_DEADLINES, LS_PLAYED].forEach((k) =>
+          [LS_EXAM, LS_ANSWERS, LS_END, LS_NAME, LS_CONFIG, LS_DEADLINES, LS_PLAYED, LS_POSITION].forEach((k) =>
             localStorage.removeItem(k)
           );
         } catch {
