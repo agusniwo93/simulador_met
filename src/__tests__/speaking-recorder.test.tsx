@@ -17,6 +17,8 @@ vi.mock("@/lib/tts/player", () => ({
 class FakeRecorder {
   static instances: FakeRecorder[] = [];
   static isTypeSupported = (type: string) => type === "audio/mp4";
+  // Simula el fallo de algunos iPhone: la grabación termina sin audio.
+  static emptyNext = false;
   state = "inactive";
   mimeType: string;
   ondataavailable: ((e: { data: Blob }) => void) | null = null;
@@ -30,7 +32,8 @@ class FakeRecorder {
   }
   stop() {
     this.state = "inactive";
-    this.ondataavailable?.({ data: new Blob([new Uint8Array(2048)], { type: this.mimeType }) });
+    const size = FakeRecorder.emptyNext ? 0 : 4096;
+    this.ondataavailable?.({ data: new Blob([new Uint8Array(size)], { type: this.mimeType }) });
     this.onstop?.();
   }
 }
@@ -44,7 +47,11 @@ let fetchMock: ReturnType<typeof vi.fn>;
 beforeEach(() => {
   vi.useFakeTimers();
   FakeRecorder.instances = [];
-  getUserMedia = vi.fn(async () => ({ getTracks: () => [{ stop: vi.fn() }] }));
+  FakeRecorder.emptyNext = false;
+  getUserMedia = vi.fn(async () => {
+    const track = { stop: vi.fn(), readyState: "live" };
+    return { getTracks: () => [track], getAudioTracks: () => [track] };
+  });
   speak = vi.fn(); // voz del navegador que nunca avisa que terminó
   fetchMock = vi.fn();
   vi.stubGlobal("MediaRecorder", FakeRecorder);
@@ -123,7 +130,7 @@ describe("speaking recorder", () => {
   it("keeps the recording when the upload fails so it can be retried", async () => {
     tts.playTTS.mockResolvedValue(undefined); // la pregunta se lee y termina bien
     fetchMock
-      .mockResolvedValueOnce({ ok: false, json: async () => ({}) })
+      .mockResolvedValueOnce({ ok: false, status: 500, json: async () => ({}) })
       .mockResolvedValueOnce({ ok: true, json: async () => ({ url: "/api/media/audio-1.mp4" }) });
     const onUploaded = setup();
     await pressStart();
@@ -133,15 +140,56 @@ describe("speaking recorder", () => {
       fireEvent.click(recording() as HTMLElement); // detener → se sube
     });
     expect(screen.getByRole("alert")).toHaveTextContent("exam.uploadFailed");
+    expect(screen.getByRole("alert")).toHaveTextContent("(http-500)");
     expect(onUploaded).not.toHaveBeenCalled();
+    const micRequests = getUserMedia.mock.calls.length;
 
     await act(async () => {
       fireEvent.click(screen.getByRole("button", { name: /exam\.retryUpload/ }));
     });
     expect(onUploaded).toHaveBeenCalledWith("/api/media/audio-1.mp4");
     // Se reintentó la misma grabación: no se volvió a pedir el micrófono.
-    expect(getUserMedia).toHaveBeenCalledTimes(1);
+    expect(getUserMedia).toHaveBeenCalledTimes(micRequests);
     expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("opens a fresh microphone right before recording (iPhone)", async () => {
+    tts.playTTS.mockResolvedValue(undefined);
+    setup();
+    await pressStart();
+    expect(recording()).toBeInTheDocument();
+    // Uno al pulsar Empezar (permiso) y otro nuevo justo antes de grabar; el
+    // primero se cierra.
+    expect(getUserMedia).toHaveBeenCalledTimes(2);
+    const first = (await getUserMedia.mock.results[0].value) as { getTracks: () => { stop: ReturnType<typeof vi.fn> }[] };
+    expect(first.getTracks()[0].stop).toHaveBeenCalled();
+  });
+
+  it("does not upload an empty recording and asks to record again", async () => {
+    tts.playTTS.mockResolvedValue(undefined);
+    FakeRecorder.emptyNext = true;
+    setup();
+    await pressStart();
+    await act(async () => {
+      fireEvent.click(recording() as HTMLElement);
+    });
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(screen.getByRole("alert")).toHaveTextContent("exam.recordFailed");
+    expect(screen.queryByRole("button", { name: /exam\.retryUpload/ })).toBeNull();
+    // Puede volver a grabar.
+    expect(screen.getByRole("button", { name: /exam\.speakStart/ })).toBeEnabled();
+  });
+
+  it("asks to record again when the server receives an empty recording", async () => {
+    tts.playTTS.mockResolvedValue(undefined);
+    fetchMock.mockResolvedValueOnce({ ok: false, status: 400, json: async () => ({ error: "empty" }) });
+    setup();
+    await pressStart();
+    await act(async () => {
+      fireEvent.click(recording() as HTMLElement);
+    });
+    expect(screen.getByRole("alert")).toHaveTextContent("exam.recordFailed");
+    expect(screen.queryByRole("button", { name: /exam\.retryUpload/ })).toBeNull();
   });
 
   it("explains when the microphone was not allowed", async () => {
@@ -149,5 +197,6 @@ describe("speaking recorder", () => {
     setup();
     await pressStart();
     expect(screen.getByRole("alert")).toHaveTextContent("exam.micDenied");
+    expect(screen.getByRole("alert")).toHaveTextContent("(mic-Error)");
   });
 });

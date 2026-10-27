@@ -10,27 +10,35 @@ import { AUDIO_EXT, sniffAudioType } from "@/lib/media";
 
 const MAX_BYTES = 15 * 1024 * 1024; // 15 MB por grabación
 
+// Deja constancia en el log del servidor (pm2 logs) de por qué se rechazó una
+// grabación, con el navegador que la envió, para diagnosticar fallos de un equipo.
+function rejected(req: Request, reason: string, status: number, detail: Record<string, unknown> = {}) {
+  const browser = (req.headers.get("user-agent") ?? "").slice(0, 160);
+  console.warn(`[audio] grabación rechazada (${reason})`, { ...detail, browser });
+  return NextResponse.json({ error: reason }, { status });
+}
+
 // Sube la grabación de voz de una tarea de Speaking. Requiere pase de acceso.
 export async function POST(req: Request) {
   const store = await cookies();
   if (!(await usableAccessPass(store.get(ACCESS_COOKIE)?.value))) {
-    return NextResponse.json({ error: "payment_required" }, { status: 402 });
+    return rejected(req, "payment_required", 402);
   }
 
   const form = await req.formData().catch(() => null);
   const file = form?.get("file");
   if (!file || typeof file === "string") {
-    return NextResponse.json({ error: "noFile" }, { status: 400 });
+    return rejected(req, "noFile", 400);
   }
 
   const buffer = Buffer.from(await file.arrayBuffer());
   if (buffer.byteLength > MAX_BYTES) {
-    return NextResponse.json({ error: "tooLarge" }, { status: 413 });
+    return rejected(req, "tooLarge", 413, { bytes: buffer.byteLength });
   }
   // Una grabación vacía o casi vacía no se puede escuchar: se rechaza para que
   // el alumno vuelva a grabar en vez de guardar un audio inservible.
   if (buffer.byteLength < 256) {
-    return NextResponse.json({ error: "empty" }, { status: 400 });
+    return rejected(req, "empty", 400, { bytes: buffer.byteLength, type: file.type });
   }
 
   // La extensión sale del contenido real; el tipo declarado por el navegador

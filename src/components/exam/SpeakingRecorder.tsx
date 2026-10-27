@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { playTTS, stopAudio, unlockAudio } from "@/lib/tts/player";
 
 type TFn = (path: string, params?: Record<string, string | number>) => string;
@@ -39,6 +39,27 @@ function readingTimeoutMs(text: string): number {
   return Math.min(60_000, Math.max(8_000, words * 500 + 5_000));
 }
 
+const subscribeNothing = () => () => {};
+
+// Una grabación real de varios segundos ocupa decenas de KB; menos que esto es
+// una grabación vacía (el micrófono no entregó audio).
+const MIN_RECORDING_BYTES = 1024;
+
+// Micrófono para grabar, pedido justo antes de empezar. En iPhone, leer la
+// pregunta en voz alta con el micrófono ya abierto puede interrumpirlo y la
+// grabación sale vacía; por eso se abre uno nuevo (el permiso ya se dio y no
+// vuelve a preguntar). Si no se puede, se usa el anterior mientras siga vivo.
+async function freshMicStream(current: MediaStream | null): Promise<MediaStream | null> {
+  try {
+    const fresh = await navigator.mediaDevices.getUserMedia({ audio: true });
+    if (current && current !== fresh) current.getTracks().forEach((tr) => tr.stop());
+    return fresh;
+  } catch {
+    const track = current?.getAudioTracks()[0];
+    return track && track.readyState === "live" ? current : null;
+  }
+}
+
 // iOS solo deja hablar a la voz del navegador si la primera frase se pide dentro
 // de un toque del usuario: se "despierta" con una frase vacía y en silencio.
 function primeSpeech(): void {
@@ -68,8 +89,16 @@ export default function SpeakingRecorder({
 }) {
   const [state, setState] = useState<RecState>("idle");
   const [errorKind, setErrorKind] = useState<RecError>("mic");
+  // Detalle técnico breve del error, visible en el aviso para poder diagnosticar
+  // a distancia (p. ej. una captura que manda el alumno).
+  const [errorCode, setErrorCode] = useState("");
   const [elapsed, setElapsed] = useState(0);
-  const [supported, setSupported] = useState(true);
+  // ¿El navegador puede grabar? En el servidor se asume que sí hasta comprobarlo.
+  const supported = useSyncExternalStore(
+    subscribeNothing,
+    () => !!navigator.mediaDevices && typeof window.MediaRecorder !== "undefined",
+    () => true
+  );
   // Grabación que no se pudo subir, para reintentar sin volver a grabar.
   const [failedBlob, setFailedBlob] = useState<Blob | null>(null);
 
@@ -85,17 +114,10 @@ export default function SpeakingRecorder({
   const utteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
   const aliveRef = useRef(true);
 
-  const fail = useCallback((kind: RecError) => {
+  const fail = useCallback((kind: RecError, code = "") => {
     setErrorKind(kind);
+    setErrorCode(code);
     setState("error");
-  }, []);
-
-  useEffect(() => {
-    setSupported(
-      typeof window !== "undefined" &&
-        !!navigator.mediaDevices &&
-        typeof window.MediaRecorder !== "undefined"
-    );
   }, []);
 
   const stopStream = useCallback(() => {
@@ -131,24 +153,40 @@ export default function SpeakingRecorder({
         const fd = new FormData();
         fd.append("file", blob, "recording");
         const res = await fetch("/api/exam/audio", { method: "POST", body: fd });
-        if (!res.ok) throw new Error("upload failed");
+        if (!res.ok) {
+          const err = ((await res.json().catch(() => ({}))) as { error?: string }).error;
+          if (err === "empty") {
+            // Reintentar la subida no serviría: hay que volver a grabar.
+            setFailedBlob(null);
+            fail("record", "empty-recording");
+            return;
+          }
+          setFailedBlob(blob);
+          fail("upload", `http-${res.status}${err ? `-${err}` : ""}`);
+          return;
+        }
         const data = (await res.json()) as { url: string };
         setFailedBlob(null);
         onUploaded(data.url);
         setState("idle");
       } catch {
         setFailedBlob(blob);
-        fail("upload");
+        fail("upload", "network");
       }
     },
     [onUploaded, fail]
   );
 
-  // Arranca la grabación sobre el stream ya abierto (tras leer la pregunta).
-  const recordOnStream = useCallback(() => {
-    const stream = streamRef.current;
+  // Arranca la grabación (tras leer la pregunta) con un micrófono recién abierto.
+  const recordOnStream = useCallback(async () => {
+    const stream = await freshMicStream(streamRef.current);
+    if (!aliveRef.current) {
+      stream?.getTracks().forEach((tr) => tr.stop());
+      return;
+    }
+    streamRef.current = stream;
     if (!stream) {
-      fail("record");
+      fail("record", "mic-lost");
       return;
     }
     try {
@@ -160,15 +198,22 @@ export default function SpeakingRecorder({
       mr.onstop = () => {
         const blob = new Blob(chunksRef.current, { type: mr.mimeType || "audio/webm" });
         stopStream();
+        // Grabación vacía: no se sube (no se podría escuchar); se pide grabar de nuevo.
+        if (blob.size < MIN_RECORDING_BYTES) {
+          fail("record", `empty-recording-${blob.size}`);
+          return;
+        }
         void upload(blob);
       };
-      mr.start();
+      // Entrega el audio en partes de 1 s: Safari a veces no entrega nada si
+      // se espera al final de la grabación.
+      mr.start(1000);
       recorderRef.current = mr;
       setElapsed(0);
       setState("recording");
       timerRef.current = window.setInterval(() => setElapsed((e) => e + 1), 1000);
-    } catch {
-      fail("record");
+    } catch (e) {
+      fail("record", `recorder-${e instanceof Error ? e.name : "error"}`);
       stopStream();
     }
   }, [stopStream, upload, fail]);
@@ -182,8 +227,8 @@ export default function SpeakingRecorder({
     setFailedBlob(null);
     try {
       streamRef.current = await navigator.mediaDevices.getUserMedia({ audio: true });
-    } catch {
-      fail("mic");
+    } catch (e) {
+      fail("mic", `mic-${e instanceof Error ? e.name : "error"}`);
       return;
     }
     setState("reading");
@@ -201,7 +246,7 @@ export default function SpeakingRecorder({
       skipReadingRef.current = null;
       stopAudio();
       if ("speechSynthesis" in window) speechSynthesis.cancel();
-      recordOnStream();
+      void recordOnStream();
     };
     skipReadingRef.current = go;
     readTimerRef.current = window.setTimeout(go, readingTimeoutMs(promptText));
@@ -335,6 +380,7 @@ export default function SpeakingRecorder({
       {state === "error" && (
         <p role="alert" className="rounded-xl bg-rose-500/10 px-4 py-3 text-sm font-medium text-rose-300">
           {errorText}
+          {errorCode && <span className="ml-1.5 text-xs opacity-60">({errorCode})</span>}
         </p>
       )}
 
